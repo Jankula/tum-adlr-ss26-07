@@ -1,2 +1,9 @@
+PRIMARY:
 End-to-End Diffusion-Based 3D Object Reconstruction From Robotic Tactile Sensing
+
+
+
+
+SECONDARY:
+TouchAnything: Diffusion-Guided 3D Reconstruction from Sparse Robot Touches
 Touch2Shape: Touch-Conditioned 3D Diffusion for Shape Exploration and Reconstruction
