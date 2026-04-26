@@ -1,16 +1,20 @@
 PRIMARY:
 End-to-End Diffusion-Based 3D Object Reconstruction From Robotic Tactile Sensing
 UGG: Unified Generative Grasping
-G-HOP: Generative Hand-Object Prior for Interaction Reconstruction and Grasp Synthesis
+
 
 
 
 
 SECONDARY:
+
 TouchAnything: Diffusion-Guided 3D Reconstruction from Sparse Robot Touches
 Touch2Shape: Touch-Conditioned 3D Diffusion for Shape Exploration and Reconstruction
 ZeroGrasp: Zero-Shot Shape Reconstruction Enabled Robotic Grasping
 Joint Diffusion for Universal Hand-Object Grasp Generation
+G-HOP: Generative Hand-Object Prior for Interaction Reconstruction and Grasp Synthesis
 
 
 VORSCHLAG:
+LION: Latent Point Diffusion Models for 3D Shape Generation
+All are worth words: a vit backbone for score-based diffusion models
