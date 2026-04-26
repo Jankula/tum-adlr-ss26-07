@@ -7,12 +7,20 @@ UGG: Unified Generative Grasping
 
 
 SECONDARY:
+<<<<<<< HEAD
 
+=======
+G-HOP: Generative Hand-Object Prior for Interaction Reconstruction and Grasp Synthesis
+>>>>>>> 730a3e2ebdcef76c0bb057c411c0a82a26d0fcc8
 TouchAnything: Diffusion-Guided 3D Reconstruction from Sparse Robot Touches
 Touch2Shape: Touch-Conditioned 3D Diffusion for Shape Exploration and Reconstruction
 ZeroGrasp: Zero-Shot Shape Reconstruction Enabled Robotic Grasping
 Joint Diffusion for Universal Hand-Object Grasp Generation
+<<<<<<< HEAD
 G-HOP: Generative Hand-Object Prior for Interaction Reconstruction and Grasp Synthesis
+=======
+Deep Compression Autoencoder
+>>>>>>> 730a3e2ebdcef76c0bb057c411c0a82a26d0fcc8
 
 
 VORSCHLAG:
