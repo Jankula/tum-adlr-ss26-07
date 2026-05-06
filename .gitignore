@@ -1,3 +1,15 @@
+# --- 3D Data & Datasets (CRITICAL) ---
+# Don't track heavy mesh/point cloud files
+*.ply
+*.pcd
+*.obj
+*.off
+*.stl
+*.bin
+*.npy
+*.npz
+
+# Ignore entire data directories
 data/
-/.vscode
-/.idea
+.vscode/
+.idea/
