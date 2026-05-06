@@ -1,0 +1,11 @@
+import trimesh
+
+
+samples Points proportionally to triangle area
+mesh = trimesh.load("model.obj", force="mesh")
+points, face_idx = trimesh.sample.sample_surface(mesh, 10000)
+
+
+
+for more even mesh, but slower computation, rejects Points that are to close to each other
+points, face_idx = trimesh.sample.sample_surface_even(mesh, 10000)
