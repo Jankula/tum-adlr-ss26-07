@@ -21,3 +21,6 @@ All are worth words: a vit backbone for score-based diffusion models
 Latent diffusion transformer for point cloud generation
 FiLM: Visual Reasoning with a General Conditioning Layer
 One Transformer Fits All Distributions in Multi-Modal Diffusion at Scale
+
+
+Perception Prioritized Training of Diffusion Models

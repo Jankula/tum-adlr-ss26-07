@@ -3,6 +3,8 @@ import torch
 import open3d as o3d
 import numpy as np
 import pathlib
+import matplotlib.pyplot as plt
+import datetime
 
 def create_folders(hparams : dict):
     path = 'models'
@@ -28,6 +30,7 @@ def create_folders(hparams : dict):
 
 
     return checkpoint_save_path, log_save_path_train, log_save_path_val
+
 
 def load_checkpoint(checkpoint_save_path, model, optimizer, scheduler, device):
     
@@ -72,6 +75,28 @@ def reload_model(denoiser, diffuser, denoiser_id, device):
 
     denoiser.eval()
     diffuser.eval()
+
+def count_parameters(model):
+    # Total parameters (including non-trainable ones)
+    total_params = sum(p.numel() for p in model.parameters())
+    
+    # Only parameters that require gradients
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    
+    return total_params, trainable_params
+
+
+def model_memory_size(model):
+    param_size = 0
+    for param in model.parameters():
+        param_size += param.nelement() * param.element_size()
+    
+    buffer_size = 0
+    for buffer in model.buffers():
+        buffer_size += buffer.nelement() * buffer.element_size()
+
+    size_all_mb = (param_size + buffer_size) / 1024**2
+    return size_all_mb
 
 
 def visualize_diffusion_progress(samples_list, window_name="Diffusion Process"):

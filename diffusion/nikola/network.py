@@ -98,6 +98,30 @@ class ResBlock(nn.Module):
     def forward(self, x):
         # x shape: [B, N, dim]
         return x + self.block(x)
+    
+class ConcatenatingResBlock(nn.Module):
+    def __init__(self, dim, time_dim):
+        super().__init__()
+        # Note: The input to the first layer is (dim + time_dim)
+        self.mlp = nn.Sequential(
+            nn.Linear(dim + time_dim, dim),
+            nn.LayerNorm(dim),
+            nn.ReLU(),
+            nn.Linear(dim, dim)
+        )
+
+    def forward(self, x, t_emb):
+        # x: [B, N, dim]
+        # t_emb: [B, time_dim]
+        
+        # 1. Expand time to match the number of points
+        # [B, time_dim] -> [B, 1, time_dim] -> [B, N, time_dim]
+        t_expanded = t_emb.unsqueeze(1).expand(-1, x.size(1), -1)
+        
+        combined = torch.cat([x, t_expanded], dim=-1)
+        
+        # 3. Residual connection
+        return x + self.mlp(combined)
 
 class Denoiser(nn.Module):
     def __init__(self, hidden_dim=256):
@@ -145,7 +169,7 @@ class Denoiser(nn.Module):
         # 3. Global Context (PointNet style)
         # We need [B, hidden_dim, N] for pooling
         global_feat = torch.max(feat, dim=1, keepdim=True)[0] # [B, 1, hidden_dim]
-        global_feat_expanded = global_feat.expand(-1, N, -1)
+        global_feat_expanded = global_feat.expand(-1, N, -1) # [B, N, hidden_dim]
         
         # 4. Combine and Refine
         # Concatenate Local + Global + Time
@@ -158,6 +182,45 @@ class Denoiser(nn.Module):
             
         return self.final_proj(x_out)
     
+
+class Denoiser1(nn.Module):
+    def __init__(self, hidden_dim=256, time_dim=128):
+        super().__init__()
+        self.time_mlp = nn.Sequential(
+            SineCosineEncoding(time_dim),
+            nn.Linear(time_dim, time_dim),
+            nn.SiLU(),
+            nn.Linear(time_dim, time_dim),
+        )
+        
+        self.input_projection = nn.Linear(3, hidden_dim)
+        self.res_layers = nn.ModuleList([
+            ConcatenatingResBlock(hidden_dim, time_dim),
+            ConcatenatingResBlock(hidden_dim, time_dim),
+            ConcatenatingResBlock(hidden_dim, time_dim),
+        ])
+        self.final_proj = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim // 4),
+            nn.SiLU(),
+            nn.Linear(hidden_dim // 4, hidden_dim // 16),
+            nn.SiLU(),
+            nn.Linear(hidden_dim // 16, 3)
+        )
+
+
+
+    def forward(self, x, t):
+        # x: [Batch, N, 3], t: [Batch]
+        B, N, _ = x.shape
+        
+        # Time Embedding
+        t_emb = self.time_mlp(t) # [B, hidden_dim]
+        
+        x_out = self.input_projection(x) # [B, N, hidden_dim]
+        for res_layer in self.res_layers:
+            x_out = res_layer(x_out, t_emb)
+
+        return self.final_proj(x_out)
 
 
 @torch.no_grad()

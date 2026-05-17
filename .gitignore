@@ -8,8 +8,10 @@
 *.bin
 *.npy
 *.npz
+*.pt
 
 # Ignore entire data directories
 data/
+diffusion/nikola/logs/
 .vscode/
 .idea/
