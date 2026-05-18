@@ -97,6 +97,9 @@ def train(denoiser, diffuser, trainloader, valloader, device, optimizer, schedul
     writer.add_text("Hyperparameters", config_markdown, global_step=0)
 
     for epoch in range(config['max_epochs']):
+        
+        train_loss_epoch_running = 0
+        
         for i, batch in enumerate(trainloader):
             # print("Batch shape: " + str(batch.shape))#DEBUG
             
@@ -121,8 +124,7 @@ def train(denoiser, diffuser, trainloader, valloader, device, optimizer, schedul
                                                                         timestep=timestep_batch,
                                                                         max_timesteps=diffuser.t
                                                                     )
-            # loss = SNR_loss + config['lambda'] * Damped_Chamfer_loss
-            loss = SNR_loss
+            loss = SNR_loss + config['lambda'] * Damped_Chamfer_loss
 
             loss.backward()
             optimizer.step()
@@ -130,6 +132,7 @@ def train(denoiser, diffuser, trainloader, valloader, device, optimizer, schedul
             # print(f"True tensor usage: {torch.cuda.memory_allocated() / 1024**2:.2f} MiB") #DEBUG
 
             # Loss logging
+            train_loss_epoch_running += loss.item()
             train_loss_running += loss.item()
             MSE_loss_running += MSE_loss.item()
             SNR_loss_running += SNR_loss.item()
@@ -164,6 +167,9 @@ def train(denoiser, diffuser, trainloader, valloader, device, optimizer, schedul
             for t_val, item_mse in zip(timestep_batch.tolist(), mse_loss_per_item.tolist()):
                 timestep_loss_sum[t_val] += item_mse
                 timestep_counts[t_val] += 1
+
+
+
 
             # if iteration % config['print_EMD_every_n_batches'] == (config['print_EMD_every_n_batches'] - 1):
             #     EMD_loss = earth_mover_distance(predicted_x0[0:1].detach(), batch[0:1].detach()).mean()
@@ -222,4 +228,6 @@ def train(denoiser, diffuser, trainloader, valloader, device, optimizer, schedul
             if weight.grad is not None:
               writer.add_histogram(f"Gradients/{name}", weight.grad, epoch)
 
-    # utils.save_model(denoiser, diffuser, config['max_epochs'], config['experiment_name'])
+        if train_loss_running / config["batch_size"] < best_train_loss:
+            utils.save_model(denoiser, diffuser, config, config['experiment_name'])
+            best_train_loss = train_loss_running / config["batch_size"]
