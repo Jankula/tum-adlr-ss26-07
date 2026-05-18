@@ -1,4 +1,5 @@
 import os
+from tabnanny import check
 import torch
 import open3d as o3d
 import numpy as np
@@ -58,23 +59,37 @@ def best_model_validation_loss(checkpoint_save_path, device):
     return 100
 
 
-def save_model(denoiser, diffuser, epoch, denoiser_id):
+def save_model(denoiser, diffuser, config, experiment_name):
     checkpoint = {
     'denoiser_state': denoiser.state_dict(),
     'diffuser_state': diffuser.state_dict(),
-    'epoch': epoch,
+    'config': config,
     }
 
-    torch.save(checkpoint, pathlib.Path(f'models/{denoiser_id}.pt'))
+    torch.save(checkpoint, pathlib.Path(f'models/{experiment_name}.pt'))
 
-def reload_model(denoiser, diffuser, denoiser_id, device):
-    checkpoint = torch.load(pathlib.Path(f'models/{denoiser_id}.pt'), weights_only=True, map_location=device)
+def reload_model(denoiser, diffuser, experiment_name, device):
+    checkpoint = torch.load(pathlib.Path(f'models/{experiment_name}.pt'), weights_only=True, map_location=device)
+
+    denoiser.load_state_dict(checkpoint['denoiser_state'])
+    diffuser.load_state_dict(checkpoint['diffuser_state'])
+    config = checkpoint['config']
+
+    denoiser.eval()
+    diffuser.eval()
+
+    return config
+
+def reload_model_old(denoiser, diffuser, experiment_name, device):
+    checkpoint = torch.load(pathlib.Path(f'models/{experiment_name}.pt'), weights_only=True, map_location=device)
 
     denoiser.load_state_dict(checkpoint['denoiser_state'])
     diffuser.load_state_dict(checkpoint['diffuser_state'])
 
     denoiser.eval()
     diffuser.eval()
+
+    return checkpoint['epoch']
 
 def count_parameters(model):
     # Total parameters (including non-trainable ones)
