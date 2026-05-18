@@ -6,6 +6,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 import numpy as np
 import trimesh
+import torch
 
 
 def get_point_cloud_files():
@@ -14,17 +15,15 @@ def get_point_cloud_files():
     point_cloud_files = sorted(data_dir.rglob("**/pointcloud*.obj"))
     return point_cloud_files
 
-
 class PointCloudDataset(Dataset):
-    def __init__(self, max_objects=None):
+    def __init__(self, max_objects=None, number_points=2048):
         super().__init__()
         self.files = get_point_cloud_files()[:max_objects]
-        self.transform = transforms.ToTensor()
+        self.number_points = number_points
 
     def __len__(self):
         return len(self.files)
 
     def __getitem__(self, index):
-        point_cloud = np.array(trimesh.load(self.files[index]).vertices, dtype="float32")
-        return self.transform(point_cloud)
-    
+        point_cloud = np.array(trimesh.load(self.files[index]).vertices, dtype="float32")[:self.number_points]
+        return torch.tensor(point_cloud)
