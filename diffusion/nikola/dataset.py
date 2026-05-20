@@ -34,7 +34,7 @@ class Dataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
 
-        item = self.items[0]
+        item = self.items[index % len(self.items)]
         # pcd = self.get_shape_pointcloud(Path(f"data/{item}"))
         # return pcd[np.newaxis, :, :]  # [B, N, 3]
         pcd_np = self.get_shape_pointcloud(Path(f"data/{item}"))

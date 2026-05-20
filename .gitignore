@@ -10,8 +10,20 @@
 *.npz
 *.pt
 
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+*.pt
+*.pth
+*.ckpt
+outputs/
+
+
 # Ignore entire data directories
 data/
 diffusion/nikola/logs/
+diffusion/nikola/output/
 .vscode/
 .idea/

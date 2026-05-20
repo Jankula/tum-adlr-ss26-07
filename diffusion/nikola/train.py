@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from torch.optim import Adam
 from torch.utils.tensorboard.writer import SummaryWriter
 
-import network, utils, dataset, metrics
+import network, utils, dataset, metrics, visualization
 
 
 def main(config):
@@ -72,19 +72,19 @@ def main(config):
     train(denoiser=denoiser, diffuser=diffuser, trainloader=trainloader, device=device, optimizer=optimizer, config=config, writer=writer,valloader=None)
 
 
-def train(denoiser, diffuser, trainloader, valloader, device, optimizer, scheduler = None, config = None, writer = None):
+def train(denoiser, diffuser, trainloader, valloader, device, optimizer, scheduler, config, model_config, writer):
 
     optimizer = optimizer
     # scheduler = scheduler
 
     denoiser.train()
 
-    best_train_loss = 0.
+    best_train_loss = 10
     train_loss_running = 0.
-    MSE_loss_running = 0.
-    SNR_loss_running = 0.
-    Chamfer_loss_running = 0.
-    Damped_Chamfer_loss_running = 0.
+    # MSE_loss_running = 0.
+    # SNR_loss_running = 0.
+    # Chamfer_loss_running = 0.
+    # Damped_Chamfer_loss_running = 0.
 
     # For tracking loss per timestep
     timestep_loss_sum = defaultdict(float)
@@ -96,7 +96,7 @@ def train(denoiser, diffuser, trainloader, valloader, device, optimizer, schedul
         config_markdown += f"| **{key}** | {value} |\n"
     writer.add_text("Hyperparameters", config_markdown, global_step=0)
 
-    for epoch in range(config['max_epochs']):
+    for epoch in range(model_config['last_epoch'], model_config['last_epoch'] + config['max_epochs']):
         
         train_loss_epoch_running = 0
         
@@ -115,29 +115,32 @@ def train(denoiser, diffuser, trainloader, valloader, device, optimizer, schedul
             # Loss calculation
             mse_loss_per_item = F.mse_loss(predicted_noise, actual_noise, reduction='none').mean(dim=[1, 2]) #[B]
             MSE_loss = mse_loss_per_item.mean()
-            SNR_loss = metrics.SNR(mse_loss_per_item, diffuser.alpha_cumprod, timestep_batch, gamma = 5.0)
-            Damped_Chamfer_loss, Chamfer_loss, predicted_x0 = metrics.compute_damped_geometry_loss(
-                                                                        noisy_pc=noisy_pc,
-                                                                        predicted_noise=predicted_noise,
-                                                                        target_pc=batch,
-                                                                        alpha_cumprod=diffuser.alpha_cumprod,
-                                                                        timestep=timestep_batch,
-                                                                        max_timesteps=diffuser.t
-                                                                    )
-            loss = SNR_loss + config['lambda'] * Damped_Chamfer_loss
+            # SNR_loss = metrics.SNR(mse_loss_per_item, diffuser.alpha_cumprod, timestep_batch, gamma = 5.0)
+            # Damped_Chamfer_loss, Chamfer_loss, predicted_x0 = metrics.compute_damped_geometry_loss(
+                                                                    #     noisy_pc=noisy_pc,
+                                                                    #     predicted_noise=predicted_noise,
+                                                                    #     target_pc=batch,
+                                                                    #     alpha_cumprod=diffuser.alpha_cumprod,
+                                                                    #     timestep=timestep_batch,
+                                                                    #     max_timesteps=diffuser.t
+                                                                    # )
+            # loss = SNR_loss + config['lambda'] * Damped_Chamfer_loss
+            loss = MSE_loss
 
             loss.backward()
             optimizer.step()
+            scheduler.step()
             # print(f"Allocated pool: {torch.cuda.memory_reserved() / 1024**2:.2f} MiB") #DEBUG
             # print(f"True tensor usage: {torch.cuda.memory_allocated() / 1024**2:.2f} MiB") #DEBUG
 
             # Loss logging
             train_loss_epoch_running += loss.item()
             train_loss_running += loss.item()
-            MSE_loss_running += MSE_loss.item()
-            SNR_loss_running += SNR_loss.item()
-            Chamfer_loss_running += Chamfer_loss.item()
-            Damped_Chamfer_loss_running += Damped_Chamfer_loss.item()
+            # MSE_loss_running += MSE_loss.item()
+            # SNR_loss_running += SNR_loss.item()
+            # Chamfer_loss_running += Chamfer_loss.item()
+            # Damped_Chamfer_loss_running += Damped_Chamfer_loss.item()
+
 
             iteration = epoch * len(trainloader) + i
 
@@ -147,30 +150,30 @@ def train(denoiser, diffuser, trainloader, valloader, device, optimizer, schedul
                 writer.add_scalar("Train Loss", train_loss_running / config["print_every_n"], iteration)
                 train_loss_running = 0.
 
-                # print(f'[{epoch:03d}/{i:05d}] MSE_loss: {MSE_loss_running / config["print_every_n"]:.3f}')
-                writer.add_scalar("MSE Loss", MSE_loss_running / config["print_every_n"], iteration)
-                MSE_loss_running = 0.
+                # # print(f'[{epoch:03d}/{i:05d}] MSE_loss: {MSE_loss_running / config["print_every_n"]:.3f}')
+                # writer.add_scalar("MSE Loss", MSE_loss_running / config["print_every_n"], iteration)
+                # MSE_loss_running = 0.
 
-                # print(f'[{epoch:03d}/{i:05d}] SNR_loss: {SNR_loss_running / config["print_every_n"]:.3f}')
-                writer.add_scalar("SNR Loss", SNR_loss_running / config["print_every_n"], iteration)
-                SNR_loss_running = 0.
+                # # print(f'[{epoch:03d}/{i:05d}] SNR_loss: {SNR_loss_running / config["print_every_n"]:.3f}')
+                # writer.add_scalar("SNR Loss", SNR_loss_running / config["print_every_n"], iteration)
+                # SNR_loss_running = 0.
 
-                # print(f'[{epoch:03d}/{i:05d}] Chamfer_loss: {Chamfer_loss_running / config["print_every_n"]:.3f}')
-                writer.add_scalar("Chamfer Loss", Chamfer_loss_running / config["print_every_n"], iteration)
-                Chamfer_loss_running = 0.
+                # # print(f'[{epoch:03d}/{i:05d}] Chamfer_loss: {Chamfer_loss_running / config["print_every_n"]:.3f}')
+                # writer.add_scalar("Chamfer Loss", Chamfer_loss_running / config["print_every_n"], iteration)
+                # Chamfer_loss_running = 0.
 
-                # print(f'[{epoch:03d}/{i:05d}] Damped_Chamfer_loss: {Damped_Chamfer_loss_running / config["print_every_n"]:.3f}')
-                writer.add_scalar("Damped Chamfer Loss", Damped_Chamfer_loss_running / config["print_every_n"], iteration)
-                Damped_Chamfer_loss_running = 0.
+                # # print(f'[{epoch:03d}/{i:05d}] Damped_Chamfer_loss: {Damped_Chamfer_loss_running / config["print_every_n"]:.3f}')
+                # writer.add_scalar("Damped Chamfer Loss", Damped_Chamfer_loss_running / config["print_every_n"], iteration)
+                # Damped_Chamfer_loss_running = 0.
 
 
+            # Average loss per timestep     
             for t_val, item_mse in zip(timestep_batch.tolist(), mse_loss_per_item.tolist()):
                 timestep_loss_sum[t_val] += item_mse
                 timestep_counts[t_val] += 1
 
 
-
-
+            {
             # if iteration % config['print_EMD_every_n_batches'] == (config['print_EMD_every_n_batches'] - 1):
             #     EMD_loss = earth_mover_distance(predicted_x0[0:1].detach(), batch[0:1].detach()).mean()
             #     print(f'[{epoch:03d}/{i:05d}] EMD_loss: {EMD_loss:.3f}')
@@ -212,7 +215,9 @@ def train(denoiser, diffuser, trainloader, valloader, device, optimizer, schedul
 
             #     # set model back to train
             #     model.train()
+            }
 
+        # Average loss per timestep            
         for time_val in range(diffuser.t):
             if timestep_counts[time_val] > 0:
                 avg_error = timestep_loss_sum[time_val] / timestep_counts[time_val]
@@ -228,6 +233,20 @@ def train(denoiser, diffuser, trainloader, valloader, device, optimizer, schedul
             if weight.grad is not None:
               writer.add_histogram(f"Gradients/{name}", weight.grad, epoch)
 
-        if train_loss_running / config["batch_size"] < best_train_loss:
-            utils.save_model(denoiser, diffuser, config, config['experiment_name'])
-            best_train_loss = train_loss_running / config["batch_size"]
+
+        # Save model weights if the best loss is achieved  
+        if  train_loss_epoch_running / len(trainloader) < best_train_loss:
+            utils.save_model(denoiser, diffuser, optimizer, scheduler, config, model_config, type = "best")
+            best_train_loss = train_loss_epoch_running / len(trainloader)
+            print('Best Model:  ', best_train_loss)
+
+        
+        # Model epoch saving
+        model_config['last_epoch'] = epoch
+        utils.save_model(denoiser, diffuser, optimizer, scheduler, config, model_config, type = 'epoch' + str(epoch))
+
+        visualization.plot_interactive_epochs(config)
+
+
+
+    print('Best Loss: ', best_train_loss)

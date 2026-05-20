@@ -59,26 +59,36 @@ def best_model_validation_loss(checkpoint_save_path, device):
     return 100
 
 
-def save_model(denoiser, diffuser, config, experiment_name):
+def save_model(denoiser, diffuser, optimizer, scheduler, config, model_config, type):
     checkpoint = {
     'denoiser_state': denoiser.state_dict(),
     'diffuser_state': diffuser.state_dict(),
+    'optimizer_state': optimizer.state_dict(),
+    'scheduler_state': scheduler.state_dict(),
     'config': config,
+    'model_config': model_config
     }
+    path = pathlib.Path(f'models/{config["experiment_name"]}')
+    path.mkdir(parents=True, exist_ok=True)
+    torch.save(checkpoint, pathlib.Path(f'models/{config["experiment_name"]}/{type}.pt'))
 
-    torch.save(checkpoint, pathlib.Path(f'models/{experiment_name}.pt'))
-
-def reload_model(denoiser, diffuser, experiment_name, device):
-    checkpoint = torch.load(pathlib.Path(f'models/{experiment_name}.pt'), weights_only=True, map_location=device)
+def reload_model(denoiser, diffuser, optimizer, scheduler, experiment_name, type, device):
+    checkpoint = torch.load(pathlib.Path(f'models/{experiment_name}/{type}.pt'), weights_only=True, map_location=device)
 
     denoiser.load_state_dict(checkpoint['denoiser_state'])
     diffuser.load_state_dict(checkpoint['diffuser_state'])
+    if optimizer is not None:
+        optimizer.load_state_dict(checkpoint['optimizer_state'])
+    if scheduler is not None:
+        scheduler.load_state_dict(checkpoint['scheduler_state'])
     config = checkpoint['config']
+    
+    model_config = checkpoint['model_config']
 
     denoiser.eval()
     diffuser.eval()
 
-    return config
+    return config, model_config
 
 def reload_model_old(denoiser, diffuser, experiment_name, device):
     checkpoint = torch.load(pathlib.Path(f'models/{experiment_name}.pt'), weights_only=True, map_location=device)
