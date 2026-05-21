@@ -3,7 +3,7 @@ import torch
 
 
 class DiffusionSchedule:
-    def __init__(self, timesteps, beta_start=1e-4, beta_end=0.02, device="cpu"):
+    def __init__(self, timesteps, device, beta_start=1e-4, beta_end=0.02):
         self.timesteps = timesteps
         self.device = device
 
@@ -15,7 +15,8 @@ class DiffusionSchedule:
         self.sqrt_one_minus_alpha_hat = torch.sqrt(1.0 - self.alpha_hat)
 
         alpha_hat_prev = torch.cat([torch.tensor([1.0], device=device), self.alpha_hat[:-1]], dim=0)
-        self.posterior_variance = self.betas * (1.0 - alpha_hat_prev) / self.alpha_hat
+        self.posterior_variance = self.betas * (1.0 - alpha_hat_prev) / (1 - self.alpha_hat)
+        self.posterior_variance2 = self.betas
 
     def extract(self, arr, t, x_shape):
         out = arr.gather(0, t)
@@ -31,3 +32,6 @@ class DiffusionSchedule:
         xt = sqrt_alpha_hat * x0 + sqrt_one_minus_alpha_hat * noise 
         
         return xt, noise
+
+
+    
