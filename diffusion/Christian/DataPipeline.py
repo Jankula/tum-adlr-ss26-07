@@ -11,8 +11,8 @@ import torch
 
 def get_point_cloud_files():
     root = Path.cwd()
-    data_dir = root / Path("data/preprocessed/")
-    point_cloud_files = sorted(data_dir.rglob("**/pointcloud*.obj"))
+    data_dir = root / Path("data/preprocessed/preprocessing2")
+    point_cloud_files = sorted(data_dir.rglob("pointcloud*.obj"))
     return point_cloud_files
 
 class PointCloudDataset(Dataset):

@@ -19,7 +19,7 @@ class Resnet(nn.Module):
         return F.relu(self.resblock(x) + self.skip(x))
     
 
-class PointnetEncoder(nn.Module):
+class PointNetEncoder(nn.Module):
     def __init__(self, number_points=2048, in_channels=3, hidden_channels=64, latent_dim=256, clamp=False):
         super().__init__()
         self.number_points = number_points
@@ -109,7 +109,7 @@ class ResnetDecoder(nn.Module):
 class PointnetVAE(nn.Module):
     def __init__(self, number_points=2048, in_channels=3, hidden_channels=64, latent_dim=256):
         super().__init__()
-        self.encoder = PointnetEncoder(number_points, in_channels, hidden_channels, latent_dim, clamp=False)
+        self.encoder = PointNetEncoder(number_points, in_channels, hidden_channels, latent_dim, clamp=False)
         self.decoder = ResnetDecoder(number_points, latent_dim)
 
     def sample_latent_z(self, mean, log_variance):
