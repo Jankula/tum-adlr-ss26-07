@@ -72,7 +72,7 @@ def main(config):
     train(denoiser=denoiser, diffuser=diffuser, trainloader=trainloader, device=device, optimizer=optimizer, config=config, writer=writer,valloader=None)
 
 
-def train(denoiser, diffuser, trainloader, valloader, device, optimizer, scheduler, config, model_config, writer):
+def train(denoiser, diffuser, trainloader, valloader, device, optimizer, scheduler, config, model_config, writer, debug_file):
 
     optimizer = optimizer
     # scheduler = scheduler
@@ -129,7 +129,8 @@ def train(denoiser, diffuser, trainloader, valloader, device, optimizer, schedul
 
             loss.backward()
             optimizer.step()
-            scheduler.step()
+            # scheduler.step()
+
             # print(f"Allocated pool: {torch.cuda.memory_reserved() / 1024**2:.2f} MiB") #DEBUG
             # print(f"True tensor usage: {torch.cuda.memory_allocated() / 1024**2:.2f} MiB") #DEBUG
 
@@ -141,6 +142,9 @@ def train(denoiser, diffuser, trainloader, valloader, device, optimizer, schedul
             # Chamfer_loss_running += Chamfer_loss.item()
             # Damped_Chamfer_loss_running += Damped_Chamfer_loss.item()
 
+            #DEBUG
+            debug_file.write('train_loss_epoch_running: ' + str(train_loss_epoch_running) + '\n')
+            debug_file.flush()
 
             iteration = epoch * len(trainloader) + i
 
@@ -234,11 +238,20 @@ def train(denoiser, diffuser, trainloader, valloader, device, optimizer, schedul
               writer.add_histogram(f"Gradients/{name}", weight.grad, epoch)
 
 
+        train_loss_epoch = train_loss_epoch_running / len(trainloader)
+        #DEBUG
+        debug_file.write('train_loss_epoch: ' + str(train_loss_epoch) + '\n')
+        debug_file.flush()
+        #DEBUG
         # Save model weights if the best loss is achieved  
-        if  train_loss_epoch_running / len(trainloader) < best_train_loss:
+        if  train_loss_epoch < best_train_loss:
             utils.save_model(denoiser, diffuser, optimizer, scheduler, config, model_config, type = "best")
-            best_train_loss = train_loss_epoch_running / len(trainloader)
+            best_train_loss = train_loss_epoch
             print('Best Model:  ', best_train_loss)
+            #DEBUG
+            debug_file.write('best_train_loss: ' + str(best_train_loss) + '\n')
+            debug_file.flush()
+            #DEBUG
 
         
         # Model epoch saving
