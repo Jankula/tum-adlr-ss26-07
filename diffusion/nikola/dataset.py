@@ -3,6 +3,7 @@ from pathlib import Path
 import json
 import numpy as np
 import trimesh
+import torch
 
 # class Data():
 #     def __init__(self, path):
@@ -30,16 +31,28 @@ class Dataset(torch.utils.data.Dataset):
         assert split in ['train', 'val', 'overfit']
         self.timesteps = timesteps
         self.split = split
-        self.items = Path(f"data/splits/{split}.txt").read_text().splitlines()
+        self.item_names = Path(f"data/splits/{split}.txt").read_text().splitlines()
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")       
+
+        temp_items = []
+        for item_name in self.item_names:
+            pcd_np = self.get_shape_pointcloud(Path(f"data/{item_name}"))
+            temp_items.append(pcd_np)
+            # pcd_tensor = torch.tensor(pcd_np, dtype=torch.float32)
+            # if torch.cuda.is_available():
+            #     pcd_tensor = pcd_tensor.to(device)
+            # self.items.append(pcd_tensor)
+            
+        self.items = torch.tensor(np.array(temp_items), dtype=torch.float32).to(device)
 
     def __getitem__(self, index):
+        # item = self.items[index % len(self.items)]
+        # pcd_np = self.get_shape_pointcloud(Path(f"data/{item}"))
+        # pcd_tensor = torch.tensor(pcd_np, dtype=torch.float32)
+        # return pcd_tensor
 
-        item = self.items[index % len(self.items)]
-        # pcd = self.get_shape_pointcloud(Path(f"data/{item}"))
-        # return pcd[np.newaxis, :, :]  # [B, N, 3]
-        pcd_np = self.get_shape_pointcloud(Path(f"data/{item}"))
-        pcd_tensor = torch.tensor(pcd_np, dtype=torch.float32)
-        return pcd_tensor
+        return self.items[index % len(self.items)]
         
 
     def __len__(self):
