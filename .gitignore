@@ -20,10 +20,12 @@ __pycache__/
 *.ckpt
 outputs/
 
+debug.txt
 
 # Ignore entire data directories
 data/
 diffusion/nikola/logs/
 diffusion/nikola/output/
+
 .vscode/
 .idea/
