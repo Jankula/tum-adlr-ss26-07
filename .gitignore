@@ -27,5 +27,8 @@ data/
 diffusion/nikola/logs/
 diffusion/nikola/output/
 
+diffusion_autoencoder/logs
+diffusion_autoencoder/output
+
 .vscode/
 .idea/
