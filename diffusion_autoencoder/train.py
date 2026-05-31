@@ -123,7 +123,6 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
             MSE_loss = mse_loss_per_item.mean()
 
             loss = MSE_loss + 0.0001 * KLD_loss
-            loss = MSE_loss
 
 
             loss.backward()
@@ -237,8 +236,8 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
 
         
         # Model epoch saving
-        model_config['last_epoch'] = epoch
-        utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = 'epoch' + str(epoch))
+        # model_config['last_epoch'] = epoch
+        # utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = 'epoch' + str(epoch))
 
         # visualization.plot_interactive_epochs(config)
 
