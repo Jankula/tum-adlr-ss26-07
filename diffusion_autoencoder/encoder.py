@@ -3,6 +3,23 @@ import torch.nn.functional as F
 import torch
 
  
+class Resnet(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super().__init__()
+        self.resblock = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            nn.LayerNorm(hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, output_size),
+            nn.LayerNorm(output_size),
+        )
+
+        self.skip = nn.Linear(input_size, output_size) if input_size != output_size else nn.Identity()
+
+    def forward(self, x):
+        return F.relu(self.resblock(x) + self.skip(x))
+    
+
 class PointNetEncoder(nn.Module):
     def __init__(self, number_points=2048, in_channels=3, hidden_channels=64, latent_dim=256, clamp=False):
         super().__init__()
@@ -66,21 +83,42 @@ class PointNetEncoder(nn.Module):
             log_variance = torch.clamp(log_variance, min=-30.0, max=20.0) # For numerical stability
 
         return mean, log_variance
+    
 
-
-class Encoder(nn.Module):
-    def __init__(self, number_points=2048, in_channels=3, hidden_channels=64, latent_dim=256, clamp=False):
+class ResnetDecoder(nn.Module):
+    def __init__(self, number_points, latent_dim):
         super().__init__()
-        self.encoder = PointNetEncoder(number_points, in_channels, hidden_channels, latent_dim, clamp)
+        self.number_points = number_points
+        self.latent_dim = latent_dim
 
-    @staticmethod
-    def KLD_loss(mean, log_variance):
-        return -0.5 * torch.mean(1 + log_variance - mean.pow(2) - log_variance.exp())
+        self.upsample1 = nn.Linear(latent_dim, 2 * latent_dim)
+        self.norm1 = nn.LayerNorm(2 * latent_dim)
+        self.resblock1 = Resnet(2 * latent_dim, 2 * latent_dim, 2 * latent_dim)
+        self.upsample2 = nn.Linear(2 * latent_dim, 4 * latent_dim)
+        self.norm2 = nn.LayerNorm(4 * latent_dim)
+        self.resblock2 = Resnet(4 * latent_dim, 4 * latent_dim, 4 * latent_dim)
+        self.output = nn.Linear(4 * latent_dim, number_points * 3)
 
     def forward(self, x):
-        return self.encoder(x)
+        B, _ = x.shape
+        x = F.relu(self.norm1(self.upsample1(x)))
+        x = self.resblock1(x)
+        x = F.relu(self.norm2(self.upsample2(x)))
+        x = self.resblock2(x)
+        return self.output(x).view(B, self.number_points, 3) #[B, N, C]
+    
+class PointnetVAE(nn.Module):
+    def __init__(self, number_points=2048, in_channels=3, hidden_channels=64, latent_dim=256):
+        super().__init__()
+        self.encoder = PointNetEncoder(number_points, in_channels, hidden_channels, latent_dim, clamp=False)
+        self.decoder = ResnetDecoder(number_points, latent_dim)
 
     def sample_latent_z(self, mean, log_variance):
         std = torch.exp(0.5 * log_variance) # compute std from log_variance
         eps = torch.randn_like(mean)
-        return mean + eps * std
+        return mean + eps * std # encoder latent z
+    
+    def forward(self, x):
+        mean, log_variance = self.encoder(x)
+        z = self.sample_latent_z(mean, log_variance)
+        return self.decoder(z), mean, log_variance # Reconstructed Point Cloud + mean and log_variance for KLD loss

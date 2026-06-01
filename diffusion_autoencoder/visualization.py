@@ -2,6 +2,8 @@ import os
 import glob
 import plotly.graph_objects as go
 from tensorboard.backend.event_processing import event_accumulator
+import matplotlib.pyplot as plt
+import numpy as np
 
 def plot_interactive_epochs(config):
     """
@@ -74,3 +76,56 @@ def plot_interactive_epochs(config):
     output_html = f"overlay_{config['experiment_name']}.html"
     fig.write_html(output_html, auto_open=True)
     print(f"Interactive canvas successfully rendered: {output_html}")
+
+def scatter_vis(pred_pcs, dataset, num_plots=3):
+
+    def to_numpy(pc):
+        if hasattr(pc, "detach"):
+            return pc.detach().cpu().numpy()
+        return np.asarray(pc)
+
+    num_plots = 3
+
+    fig = plt.figure(figsize=(18, 4))
+
+    for i in range(num_plots):
+        pred_pc = to_numpy(pred_pcs[i])
+        target_pc = to_numpy(dataset[i])
+
+        ax = fig.add_subplot(1, num_plots, i + 1, projection="3d")
+
+        ax.scatter(
+            target_pc[:, 0], target_pc[:, 1], target_pc[:, 2],
+            c="red", s=2, alpha=0.65, label="Target"
+        )
+
+        ax.scatter(
+            pred_pc[:, 0], pred_pc[:, 1], pred_pc[:, 2],
+            c="blue", s=2, alpha=0.65, label="Prediction"
+        )
+
+        ax.set_title(f"Sample {i+1}", fontsize=12)
+
+        # Achsen, Ticks und Grid entfernen
+        ax.set_axis_off()
+        ax.grid(False)
+
+        # Gleiche Skalierung für alle Achsen
+        all_points = np.concatenate([target_pc, pred_pc], axis=0)
+        center = all_points.mean(axis=0)
+        max_range = (all_points.max(axis=0) - all_points.min(axis=0)).max() / 2
+
+        ax.set_xlim(center[0] - max_range, center[0] + max_range)
+        ax.set_ylim(center[1] - max_range, center[1] + max_range)
+        ax.set_zlim(center[2] - max_range, center[2] + max_range)
+
+    # Gemeinsame Legende
+    fig.legend(
+        loc="upper center",
+        ncol=2,
+        fontsize=12,
+        frameon=False
+    )
+
+    plt.tight_layout()
+    plt.show()

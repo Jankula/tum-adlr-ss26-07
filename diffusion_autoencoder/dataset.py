@@ -63,3 +63,24 @@ class Dataset(torch.utils.data.Dataset):
         points = np.array(pcd.vertices)
         
         return points
+
+def get_point_cloud_files(root:Path):
+    if not root.exists:
+        print("Paath does not exist")
+        return []
+    point_cloud_files = sorted(root.rglob("pointcloud*.obj"))
+    return point_cloud_files
+
+
+class PointCloudDataset(torch.utils.data.Dataset):
+    def __init__(self, root:Path, max_objects=None, number_points=2048):
+        super().__init__()
+        self.files = get_point_cloud_files(root)[:max_objects]
+        self.number_points = number_points
+
+    def __len__(self):
+        return len(self.files)
+
+    def __getitem__(self, index):
+        point_cloud = np.array(trimesh.load(self.files[index]).vertices, dtype="float32")[:self.number_points]
+        return torch.tensor(point_cloud)

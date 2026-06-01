@@ -34,6 +34,7 @@ class ConcatSquashLinear(nn.Module):
         #     bias = bias.unsqueeze(1)
         ret = self._layer(x) * gate + bias
         return ret
+    
 
 
 class Resnet(nn.Module):
