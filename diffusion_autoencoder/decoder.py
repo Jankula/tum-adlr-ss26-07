@@ -10,17 +10,14 @@ class Diffuser(nn.Module):
         super().__init__()
         self.T = timesteps
         
-        # 1. Calculate values locally
         beta = torch.linspace(beta_start, beta_end, timesteps)
         alpha = 1.0 - beta
         alpha_cumprod = torch.cumprod(alpha, dim=0)
         
-        # 2. Register buffers (This moves them to GPU automatically with .to(device))
         self.register_buffer('beta', beta)
         self.register_buffer('alpha', alpha)
         self.register_buffer('alpha_cumprod', alpha_cumprod)
         
-        # Pre-calculating these saves CPU/GPU cycles during training
         self.register_buffer('sqrt_alpha_cumprod', torch.sqrt(alpha_cumprod))
         self.register_buffer('sqrt_one_minus_alpha_cumprod', torch.sqrt(1.0 - alpha_cumprod))
 
@@ -75,7 +72,7 @@ class PointwiseNet(nn.Module):
         return out
 
 class Decoder(nn.Module):
-    def __init__(self, number_points=2048, point_dim=3, hidden_dim=32, latent_dim=256, timesteps=1000, beta_start=1e-4, beta_end=0.02):
+    def __init__(self, number_points=2048, point_dim=3, hidden_dim=64, latent_dim=32, timesteps=1000, beta_start=1e-4, beta_end=0.02):
         super().__init__()
         self.diffuser = Diffuser(timesteps, beta_start, beta_end)
         self.denoiser = PointwiseNet(point_dim, latent_dim, hidden_dim)
@@ -134,20 +131,20 @@ def sample_ddim(decoder, code, n_points=2048, steps=50):
         prev_t = times[i+1].unsqueeze(0) if i+1 < len(times) else torch.tensor([-1])
         prev_t = prev_t.to(device)
         
-        # 1. Predict noise
+        # Predict noise
         pred_noise = denoiser(x, beta, code)
         
-        # 2. Get alpha values for current and previous step
+        # Get alpha values for current and previous step
         alpha_t = diffuser.alpha_cumprod[t]
         alpha_prev = diffuser.alpha_cumprod[prev_t] if prev_t >= 0 else torch.tensor([1.0], device=device)
         
-        # 3. Calculate "predicted x0" (the clean shape)
+        # Calculate "predicted x0" (the clean shape)
         pred_x0 = (x - torch.sqrt(1 - alpha_t) * pred_noise) / torch.sqrt(alpha_t)
         
-        # 4. Calculate direction pointing to x_t
+        # Calculate direction pointing to x_t
         direction_xt = torch.sqrt(1 - alpha_prev) * pred_noise
         
-        # 5. Update x
+        # Update x
         x = torch.sqrt(alpha_prev) * pred_x0 + direction_xt
         
     return x
