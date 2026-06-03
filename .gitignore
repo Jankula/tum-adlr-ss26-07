@@ -30,5 +30,9 @@ diffusion/nikola/output/
 diffusion_autoencoder/logs
 diffusion_autoencoder/output
 
+**/logs/
+**/output/
+**/models/
+
 .vscode/
 .idea/
