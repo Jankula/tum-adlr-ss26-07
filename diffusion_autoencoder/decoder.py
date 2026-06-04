@@ -122,6 +122,16 @@ class Decoder(nn.Module):
 
 @torch.no_grad()
 def sample_ddpm(decoder, code, n_points=2048):
+    """Generate a sample using the DDPM reverse diffusion process.
+
+    Args:
+        decoder: Decoder model containing the diffuser and denoiser modules.
+        code: Latent code used as conditioning input for the denoiser, shape (B, F).
+        n_points: Number of points to generate in the output point cloud.
+
+    Returns:
+        Generated point cloud tensor of shape (1, n_points, 3).
+    """
     diffuser = decoder.diffuser
     denoiser = decoder.denoiser
 
@@ -154,6 +164,18 @@ def sample_ddpm(decoder, code, n_points=2048):
 
 @torch.no_grad()
 def sample_ddim(decoder, code, n_points=2048, steps=50):
+    """Generate a sample using the DDIM reverse diffusion process.
+
+    Args:
+        decoder: Decoder model containing the diffuser and denoiser modules.
+        code: Latent code used as conditioning input for the denoiser, shape (B, F).
+        n_points: Number of points to generate in the output point cloud.
+        steps: Number of inference steps to use in the DDIM scheduler.
+
+    Returns:
+        Generated point cloud tensor of shape (1, n_points, 3).
+    """
+    
     diffuser = decoder.diffuser
     denoiser = decoder.denoiser
     
