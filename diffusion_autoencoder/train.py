@@ -10,68 +10,65 @@ from torch.utils.tensorboard.writer import SummaryWriter
 import network, utils, dataset
 
 
-def main(config):
-    """
-    Driver function for training a diffusion model
-    :param config: configuration for training - has the following keys
-                   'experiment_name': name of the experiment, checkpoint will be saved to folder "models/<experiment_name>"
-                   'device': device on which model is trained, e.g. 'cpu' or 'cuda:0'
-                   'resume_ckpt': None if training from scratch, otherwise path to checkpoint (saved weights)
-                   'learning_rate': learning rate for optimizer
-                   'timesteps' : the number of timesteps for the diffusion process
-                   'max_epochs': total number of epochs after which training should stop
-                   'batch_size': batch size for training and validation dataloaders
-                   'print_every_n': print train loss every n iterations
-                   'validate_every_n': print validation loss and validation accuracy every n iterations
-                   'is_overfit': if the training is done on a small subset of data specified in exercise_2/split/overfit.txt,
-                                 train and validation done on the same set, so error close to 0 means a good overfit. Useful for debugging.
-    """
+# def main(config):
+#     """
+#     Driver function for training a diffusion model
+#     :param config: configuration for training - has the following keys
+#                    'experiment_name': name of the experiment, checkpoint will be saved to folder "models/<experiment_name>"
+#                    'device': device on which model is trained, e.g. 'cpu' or 'cuda:0'
+#                    'resume_ckpt': None if training from scratch, otherwise path to checkpoint (saved weights)
+#                    'learning_rate': learning rate for optimizer
+#                    'timesteps' : the number of timesteps for the diffusion process
+#                    'max_epochs': total number of epochs after which training should stop
+#                    'batch_size': batch size for training and validation dataloaders
+#                    'print_every_n': print train loss every n iterations
+#                    'validate_every_n': print validation loss and validation accuracy every n iterations
+#                    'is_overfit': if the training is done on a small subset of data specified in exercise_2/split/overfit.txt,
+#                                  train and validation done on the same set, so error close to 0 means a good overfit. Useful for debugging.
+#     """
 
-    # declare device
-    device = torch.device('cpu')
-    if torch.cuda.is_available() and config['device'].startswith('cuda'):
-        device = torch.device(config['device'])
-        print('Using device:', config['device'])
-    else:
-        print('Using CPU')
+#     # declare device
+#     device = torch.device('cpu')
+#     if torch.cuda.is_available() and config['device'].startswith('cuda'):
+#         device = torch.device(config['device'])
+#         print('Using device:', config['device'])
+#     else:
+#         print('Using CPU')
 
-    # create dataloaders
-    trainset = dataset.Dataset('train' if not config['is_overfit'] else 'overfit')
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=config['batch_size'], shuffle=True, num_workers=2)
+#     # create dataloaders
+#     trainset = dataset.Dataset('train' if not config['is_overfit'] else 'overfit')
+#     trainloader = torch.utils.data.DataLoader(trainset, batch_size=config['batch_size'], shuffle=True, num_workers=2)
 
-    valset = dataset.OverfitDataset('val' if not config['is_overfit'] else 'overfit')
-    valloader = torch.utils.data.DataLoader(valset, batch_size=config['batch_size'], shuffle=False, num_workers=2)
+#     valset = dataset.OverfitDataset('val' if not config['is_overfit'] else 'overfit')
+#     valloader = torch.utils.data.DataLoader(valset, batch_size=config['batch_size'], shuffle=False, num_workers=2)
 
-    denoiser = network.Denoiser()
-    diffuser = network.Diffuser(config['timesteps'])
+#     denoiser = network.Denoiser()
+#     diffuser = network.Diffuser(config['timesteps'])
 
-    # load model if resuming from checkpoint
-    if config['resume_ckpt'] is not None:
-        utils.reload_model(denoiser, diffuser, config['experiment_name'], device)
+#     # load model if resuming from checkpoint
+#     if config['resume_ckpt'] is not None:
+#         utils.reload_model(denoiser, diffuser, config['experiment_name'], device)
 
-    # move model to specified device
-    denoiser.to(device)
-    diffuser.to(device)
-    optimizer = torch.optim.Adam(denoiser.parameters(), lr=config['learning_rate'])
+#     # move model to specified device
+#     denoiser.to(device)
+#     diffuser.to(device)
+#     optimizer = torch.optim.Adam(denoiser.parameters(), lr=config['learning_rate'])
 
-    # Create tensorboard writer    
-    log_path = pathlib.Path(f"logs/diffusion_training/{config['experiment_name']}")
-    writer = SummaryWriter(log_path)
+#     # Create tensorboard writer    
+#     log_path = pathlib.Path(f"logs/diffusion_training/{config['experiment_name']}")
+#     writer = SummaryWriter(log_path)
 
-    #Run this code in terminal to start tensorboard: tensorboard --logdir=diffusion/nikola/logs/diffusion_training
+#     #Run this code in terminal to start tensorboard: tensorboard --logdir=diffusion/nikola/logs/diffusion_training
 
 
-    total, trainable = utils.count_parameters(denoiser)
-    print(f"Total: {total:,} | Trainable: {trainable:,} | Model size: {utils.model_memory_size(denoiser):.3f} MB")
+#     total, trainable = utils.count_parameters(denoiser)
+#     print(f"Total: {total:,} | Trainable: {trainable:,} | Model size: {utils.model_memory_size(denoiser):.3f} MB")
 
-    # start training
-    train(denoiser=denoiser, diffuser=diffuser, trainloader=trainloader, device=device, optimizer=optimizer, config=config, writer=writer,valloader=None)
+#     # start training
+#     train(denoiser=denoiser, diffuser=diffuser, trainloader=trainloader, device=device, optimizer=optimizer, config=config, writer=writer,valloader=None)
 
 
 def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler, config, model_config, writer_train, writer_val, debug_file):
-
-    optimizer = optimizer
-    # scheduler = scheduler
 
     encoder.train()
     decoder.train()
@@ -110,11 +107,11 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
             mean, log_variance = encoder(batch)
             code = encoder.sample_latent_z(mean, log_variance)
 
-            timestep_batch = torch.randint(0, diffuser.T, (batch.shape[0],), device=device).long()
-            beta_batch = diffuser.beta[timestep_batch]
+            timestep_batch = torch.randint(0, diffuser.T, (batch.shape[0],), device=device).long() #[B,]
+            # beta_batch = diffuser.beta[timestep_batch]
             
             noisy_pc, actual_noise = diffuser.add_noise(batch, timestep_batch)
-            predicted_noise = denoiser(noisy_pc, beta_batch, code)
+            predicted_noise = denoiser(noisy_pc, timestep_batch, code)
 
             # Loss calculation
             KLD_loss = encoder.KLD_loss(mean, log_variance)
@@ -122,7 +119,8 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
             mse_loss_per_item = F.mse_loss(predicted_noise, actual_noise, reduction='none').mean(dim=[1, 2]) #[B]
             MSE_loss = mse_loss_per_item.mean()
 
-            loss = MSE_loss + min(0.01, 0.0001 * 1.2 ** epoch) * KLD_loss
+            # loss = MSE_loss + min(0.01, 0.0001 * 1.2 ** epoch) * KLD_loss
+            loss = MSE_loss + 0.001 * KLD_loss
 
 
             loss.backward()
@@ -165,7 +163,7 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
             #         batch_val = batch_val.to(device)
 
             #         with torch.no_grad():
-            #             mean, log_variance = encoder(batch)
+            #             mean, log_variance = encoder(batch_val)
             #             code = encoder.sample_latent_z(mean, log_variance)
 
             #             timestep_batch = torch.randint(0, diffuser.T, (batch.shape[0],), device=device).long()

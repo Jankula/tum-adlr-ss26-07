@@ -28,10 +28,11 @@ class Dataset(torch.utils.data.Dataset):
         :param split: one of 'train', 'val' or 'overfit' - for training, validation or overfitting split
         """
         super().__init__()
-        assert split in ['train', 'val', 'overfit', 'test']
+        assert split in ['train', 'val', 'overfit']
         self.timesteps = timesteps
         self.split = split
         self.item_names = Path(f"data/splits/{split}.txt").read_text().splitlines()
+        self.real_length = len(self.item_names)
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")       
 
@@ -50,10 +51,7 @@ class Dataset(torch.utils.data.Dataset):
         """
         :return: length of the dataset
         """
-        if self.split == 'test':
-            return len(self.items)
-        else:
-            return self.timesteps
+        return self.timesteps
 
 
     @staticmethod

@@ -71,11 +71,52 @@ class PointwiseNet(nn.Module):
 
         return out
 
+
+class PointwiseNet_mod(nn.Module):
+
+    def __init__(self, point_dim, latent_dim, hidden_dim):
+        super().__init__()
+        self.act = F.leaky_relu
+        self.hidden_dim = hidden_dim
+        self.layers = nn.ModuleList([
+            ConcatSquashLinear(3, self.hidden_dim, 2*latent_dim),
+            ConcatSquashLinear(self.hidden_dim, 2 * self.hidden_dim, 2*latent_dim),
+            ConcatSquashLinear(2 * self.hidden_dim, 4 * self.hidden_dim, 2*latent_dim),
+            ConcatSquashLinear(self.hidden_dim * 4, 2 * self.hidden_dim, 2*latent_dim),
+            ConcatSquashLinear(2 * self.hidden_dim, self.hidden_dim, 2*latent_dim),
+            ConcatSquashLinear(self.hidden_dim, point_dim, 2*latent_dim)
+        ])
+        self.time_emb = SineCosineEncoding(latent_dim)
+
+    def forward(self, x, time, context):
+        """
+        Args:
+            x:  Point clouds at some timestep t, (B, N, d).
+            beta:     Time. (B, ).
+            context:  Shape latents. (B, F).
+        """
+        batch_size = x.size(0)
+        context = context.view(batch_size, 1, -1)   # (B, 1, F)
+
+        time = time.view(batch_size)
+        time_emb = self.time_emb(time)  # (B, F)
+        time_emb = time_emb.unsqueeze(1)
+
+        ctx_emb = torch.cat([time_emb, context], dim=-1)    # (B, 1, F+F)
+
+        out = x
+        for i, layer in enumerate(self.layers):
+            out = layer(ctx=ctx_emb, x=out)
+            if i < len(self.layers) - 1:
+                out = self.act(out)
+
+        return out
+
 class Decoder(nn.Module):
     def __init__(self, number_points=2048, point_dim=3, hidden_dim=64, latent_dim=32, timesteps=1000, beta_start=1e-4, beta_end=0.02):
         super().__init__()
         self.diffuser = Diffuser(timesteps, beta_start, beta_end)
-        self.denoiser = PointwiseNet(point_dim, latent_dim, hidden_dim)
+        self.denoiser = PointwiseNet_mod(point_dim, latent_dim, hidden_dim)
 
 
 
@@ -126,13 +167,13 @@ def sample_ddim(decoder, code, n_points=2048, steps=50):
     for i in range(len(times)):
         t = times[i].unsqueeze(0)
         t = t.to(device)
-        beta = diffuser.beta[t]
-        beta = beta.to(device)
+        # beta = diffuser.beta[t]
+        # beta = beta.to(device)
         prev_t = times[i+1].unsqueeze(0) if i+1 < len(times) else torch.tensor([-1])
         prev_t = prev_t.to(device)
         
         # Predict noise
-        pred_noise = denoiser(x, beta, code)
+        pred_noise = denoiser(x, t, code)
         
         # Get alpha values for current and previous step
         alpha_t = diffuser.alpha_cumprod[t]

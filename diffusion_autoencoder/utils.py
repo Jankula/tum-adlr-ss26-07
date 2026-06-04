@@ -175,7 +175,6 @@ def visualize_comparison(pc_target, pc_generated, window_name="Target (Red) vs G
     coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5, origin=[0, 0, 0])
 
     # 4. Visualize
-    print("Visualizing: Target is RED, Generated is BLUE.")
     o3d.visualization.draw_geometries([target_pcd, gen_pcd, coord_frame], 
                                       window_name=window_name)
 
