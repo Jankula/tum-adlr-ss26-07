@@ -1,6 +1,7 @@
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
+from torch.optim.lr_scheduler import LambdaLR
 
 
 class SineCosineEncoding(nn.Module):
@@ -18,6 +19,20 @@ class SineCosineEncoding(nn.Module):
         emb = t[:, None] * emb[None, :]
         emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
         return emb
+    
+def get_linear_scheduler(optimizer, start_epoch, end_epoch, start_lr, end_lr):
+    assert(start_epoch < end_epoch, "end epoch must be larger than start epoch")
+    def lr_func(epoch):
+        if epoch <= start_epoch:
+            return 1.0
+        elif epoch <= end_epoch:
+            total = end_epoch - start_epoch
+            delta = epoch - start_epoch
+            frac = delta / total
+            return (1-frac) * 1.0 + frac * (end_lr / start_lr)
+        else:
+            return end_lr / start_lr
+    return LambdaLR(optimizer, lr_lambda=lr_func)
 
 class ConcatSquashLinear(nn.Module):
     def __init__(self, dim_in, dim_out, dim_ctx):
@@ -34,7 +49,6 @@ class ConcatSquashLinear(nn.Module):
         #     bias = bias.unsqueeze(1)
         ret = self._layer(x) * gate + bias
         return ret
-    
 
 
 class Resnet(nn.Module):

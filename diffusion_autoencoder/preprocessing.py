@@ -134,3 +134,17 @@ def points_to_mesh_bpa(points, radius=None):
     )
     
     return mesh
+
+def count_meshes(root:Path):
+    mesh_paths = list()
+    if not isinstance(root, Path):
+        root = Path(root)
+    if not root.exists():
+        print("root directory does not exists")
+    mesh_paths = sorted((root / Path("data/studentGrasping/student_grasps_v1")).rglob("**/*.obj"))
+    return len(mesh_paths), mesh_paths
+
+
+#number_meshes, mesh_list = count_meshes("../../../GraspDataset")
+#print(number_meshes)
+#print(mesh_list[:3])
