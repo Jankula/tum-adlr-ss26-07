@@ -202,7 +202,7 @@ def gpu_diffusion_worker(input_queue, output_queue):
     decoder = Decoder(number_points=2048, point_dim=3, hidden_dim=128, latent_dim=32, timesteps=1000, beta_start=1e-4, beta_end=0.02)
     
     experiment_name = "Jun04_02-43_3_Objects_50epochs_16batch_KL0.001_hidden_dec128_time_emb"
-    utils.reload_model(encoder, decoder, None, None, experiment_name, 'best', device)
+    utils.reload_model_old(encoder, decoder, None, None, experiment_name, 'best', device)
     
     encoder.to(device)
     decoder.to(device)
@@ -261,7 +261,7 @@ def main():
     decoder_cpu = Decoder(number_points=2048, point_dim=3, hidden_dim=128, latent_dim=32, timesteps=1000, beta_start=1e-4, beta_end=0.02)
     
     # Pass the dummy decoder instead of None
-    utils.reload_model(encoder_cpu, decoder_cpu, None, None, "Jun04_02-43_3_Objects_50epochs_16batch_KL0.001_hidden_dec128_time_emb", 'best', device_cpu)
+    utils.reload_model_old(encoder_cpu, decoder_cpu, None, None, "Jun04_02-43_3_Objects_50epochs_16batch_KL0.001_hidden_dec128_time_emb", 'best', device_cpu)
     
     encoder_cpu.eval()
     

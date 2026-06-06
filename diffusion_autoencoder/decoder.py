@@ -121,7 +121,7 @@ class Decoder(nn.Module):
 
 
 @torch.no_grad()
-def sample_ddpm(decoder, code, n_points=2048):
+def sample_ddpm(decoder, code, n_points=2048, timesteps=1000):
     """Generate a sample using the DDPM reverse diffusion process.
 
     Args:
@@ -141,7 +141,7 @@ def sample_ddpm(decoder, code, n_points=2048):
     x = torch.randn(1, n_points, 3, device=device)
     
     # 2. Step backwards from T to 1
-    for i in reversed(range(1000)):
+    for i in reversed(range(timesteps)):
         t = torch.tensor([i], device=device)
         beta = diffuser.beta[t]
         beta = beta.to(device)
@@ -163,7 +163,7 @@ def sample_ddpm(decoder, code, n_points=2048):
 
 
 @torch.no_grad()
-def sample_ddim(decoder, code, n_points=2048, steps=50):
+def sample_ddim(decoder, code, n_points=2048, steps=50, timesteps=1000):
     """Generate a sample using the DDIM reverse diffusion process.
 
     Args:
@@ -184,7 +184,7 @@ def sample_ddim(decoder, code, n_points=2048, steps=50):
     x = torch.randn(1, n_points, 3, device=device)
     
     # Define the sparse schedule (e.g., [980, 960, ..., 0])
-    times = torch.linspace(999, 0, steps).long()
+    times = torch.linspace(timesteps-1, 0, steps).long()
     
     for i in range(len(times)):
         t = times[i].unsqueeze(0)
