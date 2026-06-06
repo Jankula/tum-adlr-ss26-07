@@ -287,7 +287,7 @@ def main(experiment_name, model_type, split_type, object_index):
 if __name__ == "__main__":
     # Standardize input injection via argparse for reusability from the CLI
     parser = argparse.ArgumentParser(description="Latent Space Interpolation Viewer")
-    parser.add_argument("--experiment_name", type=str, default="Jun04_21-14_8_Objects_100epochs_16batch_KL0.001_hidden_dec128_time_emb")
+    parser.add_argument("--experiment_name", type=str, default="Jun06_19-58_8_Objects_100timestep_1000epochs_16batch_KL0.001_hidden_dec128_time_emb")
     parser.add_argument("--type", type=str, default="best")
     parser.add_argument("--split_type", type=str, default="train")
     parser.add_argument("--object_index", type=int, default=0, help="Dataset index for starting latent vector z0")
