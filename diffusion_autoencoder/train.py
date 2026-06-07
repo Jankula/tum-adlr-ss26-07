@@ -3,69 +3,13 @@ import os
 from collections import defaultdict
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.tensorboard.writer import SummaryWriter
+from scipy.integrate import trapezoid
 
-import network, utils, dataset
-
-
-# def main(config):
-#     """
-#     Driver function for training a diffusion model
-#     :param config: configuration for training - has the following keys
-#                    'experiment_name': name of the experiment, checkpoint will be saved to folder "models/<experiment_name>"
-#                    'device': device on which model is trained, e.g. 'cpu' or 'cuda:0'
-#                    'resume_ckpt': None if training from scratch, otherwise path to checkpoint (saved weights)
-#                    'learning_rate': learning rate for optimizer
-#                    'timesteps' : the number of timesteps for the diffusion process
-#                    'max_epochs': total number of epochs after which training should stop
-#                    'batch_size': batch size for training and validation dataloaders
-#                    'print_every_n': print train loss every n iterations
-#                    'validate_every_n': print validation loss and validation accuracy every n iterations
-#                    'is_overfit': if the training is done on a small subset of data specified in exercise_2/split/overfit.txt,
-#                                  train and validation done on the same set, so error close to 0 means a good overfit. Useful for debugging.
-#     """
-
-#     # declare device
-#     device = torch.device('cpu')
-#     if torch.cuda.is_available() and config['device'].startswith('cuda'):
-#         device = torch.device(config['device'])
-#         print('Using device:', config['device'])
-#     else:
-#         print('Using CPU')
-
-#     # create dataloaders
-#     trainset = dataset.Dataset('train' if not config['is_overfit'] else 'overfit')
-#     trainloader = torch.utils.data.DataLoader(trainset, batch_size=config['batch_size'], shuffle=True, num_workers=2)
-
-#     valset = dataset.OverfitDataset('val' if not config['is_overfit'] else 'overfit')
-#     valloader = torch.utils.data.DataLoader(valset, batch_size=config['batch_size'], shuffle=False, num_workers=2)
-
-#     denoiser = network.Denoiser()
-#     diffuser = network.Diffuser(config['timesteps'])
-
-#     # load model if resuming from checkpoint
-#     if config['resume_ckpt'] is not None:
-#         utils.reload_model(denoiser, diffuser, config['experiment_name'], device)
-
-#     # move model to specified device
-#     denoiser.to(device)
-#     diffuser.to(device)
-#     optimizer = torch.optim.Adam(denoiser.parameters(), lr=config['learning_rate'])
-
-#     # Create tensorboard writer    
-#     log_path = pathlib.Path(f"logs/diffusion_training/{config['experiment_name']}")
-#     writer = SummaryWriter(log_path)
-
-#     #Run this code in terminal to start tensorboard: tensorboard --logdir=diffusion/nikola/logs/diffusion_training
-
-
-#     total, trainable = utils.count_parameters(denoiser)
-#     print(f"Total: {total:,} | Trainable: {trainable:,} | Model size: {utils.model_memory_size(denoiser):.3f} MB")
-
-#     # start training
-#     train(denoiser=denoiser, diffuser=diffuser, trainloader=trainloader, device=device, optimizer=optimizer, config=config, writer=writer,valloader=None)
+import utils
 
 
 def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler, config, model_config, writer_train, writer_val, debug_file):
@@ -195,12 +139,21 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
             #     decoder.train()
             
 
-        # Average loss per timestep            
+        # Average loss per timestep
+        avg_error_list = []
+        valid_timesteps = []
         for time_val in range(diffuser.T):
             if timestep_counts[time_val] > 0:
                 avg_error = timestep_loss_sum[time_val] / timestep_counts[time_val]
+                avg_error_list.append(avg_error)
+                valid_timesteps.append(time_val)
                 writer_train.add_scalar(f"MSE Timestep Error/Epoch_{epoch:03d}", avg_error, global_step=time_val)
-                
+        
+        # Calculate the integral of the average mse per timestep
+        MSE_per_timestep_integral = trapezoid(np.array(avg_error_list), np.array(valid_timesteps))
+        writer_train.add_scalar(f"MSE per Timestep Integral", MSE_per_timestep_integral, epoch)
+        print("MSE per timestep integral: ", MSE_per_timestep_integral)
+
         # Clear dictionaries so the next epoch tracks completely fresh averages
         timestep_loss_sum.clear()
         timestep_counts.clear()
