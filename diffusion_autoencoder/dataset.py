@@ -79,6 +79,9 @@ class PointCloudDataset(torch.utils.data.Dataset):
         super().__init__()
 
         self.files = files
+        if max_objects:
+            self.files = self.files[:max_objects]
+            
         self.number_points = number_points
 
     def __len__(self):

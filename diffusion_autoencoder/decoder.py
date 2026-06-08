@@ -53,7 +53,7 @@ class VarianceSchedule(nn.Module):
 
 class PointwiseNet(nn.Module):
 
-    def __init__(self, point_dim, context_dim, hidden_dim, residual=True):
+    def __init__(self, point_dim, context_dim, hidden_dim=128, residual=True):
         super().__init__()
         self.act = F.leaky_relu
         self.residual = residual

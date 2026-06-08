@@ -1,11 +1,12 @@
 # libraries
-
 import open3d as o3d
-import trimesh
 import numpy as np
+import trimesh
+
 from pathlib import Path
 import os
 import random
+
 
 def get_project_root():
     """Finds the root by looking for a marker file."""
@@ -47,25 +48,48 @@ def get_random_shapenet_meshes(seed: int, num_objects: int, root: Path) -> list[
     # 5. Sample and return
     return random.sample(all_meshes, k)
 
+def get_random_preprocessed_meshes(seed:int, num_objects:int, root:Path) -> list[Path]:
+    """   
+    Navigates the ShapeNet hierarchy to return a random list of mesh paths.
+    
+    Hierarchy: root/data/preprocessed/preprocessing/zfill(7).obj
+    """
+    base_path = root / Path("data/preprocessed/preprocessed_meshes")
+    
+    if not base_path.exists():
+        raise FileNotFoundError(f"The path {base_path} does not exist.")
+    
+    all_meshes = sorted(base_path.glob("*.obj"))
+    
+    if not all_meshes:
+        print("No mesh.obj files found in the specified hierarchy.")
+        return []
+    
+    random.seed(seed)
+    
+    k = min(num_objects, len(all_meshes))
+    
+    return random.sample(all_meshes, k)
+
 def normalize_points_max(pcs):
     # Centering: Subtract the mean of the points
-    centroid = np.mean(pcs, axis=0)
+    centroid = np.mean(pcs, axis=(0, 1))
     pcs = pcs - centroid
     
     # Scaling: Find the furthest point and divide by that distance
-    m = np.max(np.sqrt(np.sum(pcs**2, axis=1)))
+    m = np.max(np.sqrt(np.sum(pcs**2, axis=2)), axis=(0, 1))
     pcs = pcs / m
     return pcs
 
 #it scales the x and y and z each, changes the overall shape
 def normalize_statistically_points(pcs):
     # Centering: Subtract the mean of the points
-    centroid = np.mean(pcs, axis=0)
+    centroid = np.mean(pcs, axis=(0,1))
     pcs = pcs - centroid
     
     # Scaling: Find the furthest point and divide by that distance
-    v = np.var(pcs, axis=0)
-    return pcs / np.sqrt(v)
+    v = np.var(pcs, axis=(0,1))
+    return pcs / np.sqrt(v), centroid, v
 
 def get_exterior_points(points, radius_multiplier=10.0):
     """
@@ -145,6 +169,33 @@ def count_meshes(root:Path):
     return len(mesh_paths), mesh_paths
 
 
-#number_meshes, mesh_list = count_meshes("../../../GraspDataset")
-#print(number_meshes)
-#print(mesh_list[:3])
+if __name__ == "__main__":
+    
+    #number_meshes, mesh_list = count_meshes("../../../GraspDataset")
+    #print(number_meshes)
+    #print(mesh_list[:3])
+    preprocessing_nr = 5
+    root = Path("../")
+    mesh_list = []
+    point_cloud_list = []
+    random_meshes = get_random_preprocessed_meshes(seed=42, root=root, num_objects=1e6)
+    for file in random_meshes:
+        mesh_list.append(trimesh.load_mesh(file, force="mesh", skip_materials=True))
+        
+    for index, mesh in enumerate(mesh_list):
+        output_path = root / Path("data/preprocessed/preprocessing" + str(preprocessing_nr) + "/mesh" + f"{index}".zfill(5) + ".obj")
+        mesh.export(output_path)
+        print(f"Save mesh to output path: {output_path}")
+        point_cloud_list.append(mesh.sample(2048))
+    
+    point_cloud_array = np.stack(point_cloud_list, axis=0)
+    point_cloud_array, mean, variance = normalize_statistically_points(point_cloud_array)
+    
+    for index, pc in enumerate(point_cloud_array):
+        output_path = root / Path("data/preprocessed/preprocessing" + str(preprocessing_nr) + "/pointcloud" + f"{index}".zfill(5) + ".obj")
+        trimesh.points.PointCloud(pc).export(output_path)
+        print(f"Saved pointcloud to output path {output_path}")
+    
+    f = open(root / Path("data/preprocessed/preprocessing" + str(preprocessing_nr) + "/log.txt"), 'w')
+    f.write(f"mean={mean}\nvariance={variance}")
+    f.close()

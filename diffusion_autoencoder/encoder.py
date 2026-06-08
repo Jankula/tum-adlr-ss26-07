@@ -21,7 +21,7 @@ class Resnet(nn.Module):
     
 
 class PointNetEncoder(nn.Module):
-    def __init__(self, number_points=2048, in_channels=3, hidden_channels=64, latent_dim=256, clamp=False):
+    def __init__(self, number_points=2048, in_channels=3, hidden_channels=128, latent_dim=256, clamp=False):
         super().__init__()
         self.number_points = number_points
         self.in_channels = in_channels
