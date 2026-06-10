@@ -9,6 +9,7 @@
 *.npy
 *.npz
 *.pt
+*.json
 
 __pycache__/
 *.pyc
@@ -23,7 +24,6 @@ outputs/
 debug.txt
 
 # Ignore entire data directories
-data/
 diffusion/nikola/logs/
 diffusion/nikola/output/
 

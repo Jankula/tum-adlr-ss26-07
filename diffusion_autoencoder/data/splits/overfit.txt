@@ -1,0 +1,8 @@
+pointcloud1.obj
+pointcloud3.obj
+pointcloud8.obj
+pointcloud10.obj
+pointcloud12.obj
+pointcloud14.obj
+pointcloud15.obj
+pointcloud18.obj

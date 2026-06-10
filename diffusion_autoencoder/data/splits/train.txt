@@ -1,0 +1,3 @@
+pointcloud10.obj
+pointcloud12.obj
+pointcloud14.obj
