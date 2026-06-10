@@ -64,3 +64,6 @@ class Dataset(torch.utils.data.Dataset):
         points = np.array(pcd.vertices)
         
         return points
+    
+
+    class Dataset_new(torch.utils.data.Dataset)
