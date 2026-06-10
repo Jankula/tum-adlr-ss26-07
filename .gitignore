@@ -10,6 +10,8 @@
 *.npz
 *.pt
 *.json
+*.zip
+*.urdf
 
 __pycache__/
 *.pyc
