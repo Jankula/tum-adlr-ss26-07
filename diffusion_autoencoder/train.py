@@ -1,5 +1,6 @@
 import pathlib
 import os
+import datetime
 from collections import defaultdict
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
 
@@ -9,7 +10,9 @@ import torch.nn.functional as F
 from torch.utils.tensorboard.writer import SummaryWriter
 from scipy.integrate import trapezoid
 
-import utils
+import utils, dataset
+from encoder import Encoder
+from decoder import Decoder
 
 
 def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler, config, model_config, writer_train, writer_val, debug_file):
@@ -196,3 +199,74 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
 
     print('Best Loss: ', best_train_loss)
     print('Best Val Loss: ', best_val_loss)
+
+if __name__ == "__main__":
+
+    # Model name
+    current_time = datetime.datetime.now().strftime("%b%d_%H-%M")
+    denoiser_name = "10_Objects_1000timestep_500epochs_6latent_16batch_KL0.001_hidden_dec128"
+    experiment_name = f"{current_time}_{denoiser_name}"
+
+
+    config = {
+        'experiment_name': experiment_name,
+        'device': 'cuda:0',
+        'batch_size': 16,
+        'resume_ckpt': None,
+        'learning_rate': 0.0004,
+        'step_size': 10, # scheduler step, one step is one batch
+        'gamma': 1,
+        'max_epochs': 500,
+        'timesteps': 1000,
+        'print_every_n': 30, # every n batches
+        # 'validate_every_n': 10,
+    }
+
+    model_config = {
+        'last_epoch': 0,
+        'enc_hidden_channels': 64,
+        'dec_hidden_dim': 128,
+        'latent_dim': 32
+    }
+
+    # declare device
+    if torch.cuda.is_available() and config['device'].startswith('cuda'):
+        device = torch.device(config['device'])
+        print('Using device:', config['device'])
+    else:
+        device = torch.device('cpu')
+        print('Using CPU')
+
+    # create dataloaders
+    trainset = dataset.Dataset('train', config['timesteps'])
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=config['batch_size'], shuffle=True, num_workers=0, pin_memory=True)
+    valset = dataset.Dataset('val', config['timesteps'])
+    valloader = torch.utils.data.DataLoader(valset, batch_size=config['batch_size'], shuffle=False, num_workers=0, pin_memory=True)
+
+    encoder = Encoder(number_points=2048, in_channels=3, hidden_channels=model_config['enc_hidden_channels'], latent_dim=model_config['latent_dim'], clamp=False)
+    decoder = Decoder(number_points=2048, point_dim=3, hidden_dim=model_config['dec_hidden_dim'], latent_dim=model_config['latent_dim'], timesteps=config['timesteps'], beta_start=1e-4, beta_end=0.02)
+
+    # move model to specified device
+    encoder.to(device)
+    decoder.to(device)
+    optimizer = torch.optim.Adam(list(encoder.parameters()) + list(decoder.parameters()), lr=config['learning_rate'])
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, config['step_size'], config['gamma'])
+    # scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.0006, steps_per_epoch=len(trainloader), epochs=config['max_epochs'], anneal_strategy='cos', three_phase=True)
+
+
+    total_enc, trainable_enc = utils.count_parameters(encoder)
+    total_dec, trainable_dec = utils.count_parameters(decoder)
+    print(f"Encoder Total: {total_enc:,} | Trainable: {trainable_enc:,} | Model size: {utils.model_memory_size(encoder):.3f} MB")
+    print(f"Decoder Total: {total_dec:,} | Trainable: {trainable_dec:,} | Model size: {utils.model_memory_size(decoder):.3f} MB")
+
+    # start training
+    torch.cuda.empty_cache()
+    #tensorboard --logdir=diffusion_autoencoder/logs
+    # Create tensorboard writer    
+    log_path = pathlib.Path(f"logs/{datetime.datetime.now().strftime('%b%d')}/{config['experiment_name']}")
+    writer = SummaryWriter(log_path)
+
+    with open("debug.txt", "w", encoding="utf-8") as debug_file:
+        train.train(encoder, decoder, trainloader, None, device, optimizer, scheduler, config, model_config, writer, None, debug_file)
+
+    writer.close()
