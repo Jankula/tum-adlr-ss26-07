@@ -9,7 +9,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.tensorboard.writer import SummaryWriter
 from scipy.integrate import trapezoid
-from pytorch3d.loss import chamfer_distance
+from metrics import chamfer_distance
 import trimesh
 
 import utils, dataset

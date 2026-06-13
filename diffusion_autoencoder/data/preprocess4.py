@@ -277,9 +277,9 @@ def build_dataset(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build Hand-Centric Point Cloud Dataset.")
     
-    parser.add_argument("--base-dir", type=str, default="/home/nikola/Projects/tum-adlr-ss26-07/data/studentGrasping/student_grasps_v1")
-    parser.add_argument("--output-dir", type=str, default="/home/nikola/Projects/tum-adlr-ss26-07/diffusion_autoencoder/data")
-    parser.add_argument("--manifold-dir", type=str, default="/home/nikola/Projects/Manifold-master/build")
+    parser.add_argument("--base-dir", type=str, default="/home/nikola/tum-adlr-ss26-07/data/studentGrasping/student_grasps_v1")
+    parser.add_argument("--output-dir", type=str, default="/home/nikola/tum-adlr-ss26-07/diffusion_autoencoder/data")
+    parser.add_argument("--manifold-dir", type=str, default="/home/nikola/Manifold/build")
     
     # Normalization Argument
     parser.add_argument("--normalize", type=str, choices=["none", "max_norm", "global_var", "coord_var"], default="max_norm",
@@ -287,9 +287,9 @@ if __name__ == "__main__":
     
     parser.add_argument("--process-all", action="store_true")
 
-    parser.add_argument("--num-train", type=int, default=10)
-    parser.add_argument("--num-val", type=int, default=0)
-    parser.add_argument("--num-test", type=int, default=0)
+    parser.add_argument("--num-train", type=int, default=100)
+    parser.add_argument("--num-val", type=int, default=10)
+    parser.add_argument("--num-test", type=int, default=10)
     
     parser.add_argument("--train-ratio", type=float, default=0.8)
     parser.add_argument("--val-ratio", type=float, default=0.1)
