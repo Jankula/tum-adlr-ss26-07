@@ -211,3 +211,68 @@ def sample_ddim(decoder, code, n_points=2048, steps=50, timesteps=1000):
         x = torch.sqrt(alpha_prev) * pred_x0 + direction_xt
         
     return x
+
+
+@torch.no_grad()
+def sample_ddim_batchable(decoder, code, n_points=2048, steps=50, timesteps=1000):
+    """Generate a sample using the DDIM reverse diffusion process.
+
+    Args:
+        decoder: Decoder model containing the diffuser and denoiser modules.
+        code: Latent code used as conditioning input for the denoiser, shape (B, F).
+        n_points: Number of points to generate in the output point cloud.
+        steps: Number of inference steps to use in the DDIM scheduler.
+
+    Returns:
+        Generated point cloud tensor of shape (B, n_points, 3).
+    """
+    
+    diffuser = decoder.diffuser
+    denoiser = decoder.denoiser
+    
+    denoiser.eval()
+    device = diffuser.beta.device
+    
+    # 1. Dynamically extract the batch size (B) from the latent code
+    B = code.shape[0]
+    
+    # 2. Apply batch size to the initial noise distribution
+    x = torch.randn(B, n_points, 3, device=device)
+    
+    # Define the sparse schedule (e.g., [980, 960, ..., 0])
+    times = torch.linspace(timesteps-1, 0, steps).long()
+    
+    for i in range(len(times)):
+        # 3. Create a batched timestep tensor of shape (B,)
+        t_val = times[i]
+        t = torch.full((B,), t_val, device=device, dtype=torch.long)
+        
+        # 4. Create a batched prev_t tensor of shape (B,)
+        if i + 1 < len(times):
+            prev_t_val = times[i+1]
+        else:
+            prev_t_val = -1
+        prev_t = torch.full((B,), prev_t_val, device=device, dtype=torch.long)
+        
+        # Predict noise (Now: x is (B, N, 3), t is (B,), code is (B, F))
+        pred_noise = denoiser(x, t, code)
+        
+        # Get alpha values for current and previous step
+        # Reshape to (B, 1, 1) so it broadcasts properly with the (B, N, 3) point cloud
+        alpha_t = diffuser.alpha_cumprod[t].view(B, 1, 1)
+        
+        if prev_t_val >= 0:
+            alpha_prev = diffuser.alpha_cumprod[prev_t].view(B, 1, 1)
+        else:
+            alpha_prev = torch.ones((B, 1, 1), device=device)
+        
+        # Calculate "predicted x0" (the clean shape)
+        pred_x0 = (x - torch.sqrt(1 - alpha_t) * pred_noise) / torch.sqrt(alpha_t)
+        
+        # Calculate direction pointing to x_t
+        direction_xt = torch.sqrt(1 - alpha_prev) * pred_noise
+        
+        # Update x
+        x = torch.sqrt(alpha_prev) * pred_x0 + direction_xt
+        
+    return x

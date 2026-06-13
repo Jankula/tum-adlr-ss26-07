@@ -9,10 +9,13 @@ import torch
 import torch.nn.functional as F
 from torch.utils.tensorboard.writer import SummaryWriter
 from scipy.integrate import trapezoid
+from pytorch3d.loss import chamfer_distance
+import trimesh
 
 import utils, dataset
 from encoder import Encoder
 from decoder import Decoder
+from decoder import sample_ddim
 
 
 def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler, config, model_config, writer_train, writer_val, debug_file):
@@ -44,9 +47,8 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
         train_loss_epoch_running = 0
         
         for i, batch in enumerate(trainloader):
-            # print("Batch shape: " + str(batch.shape))#DEBUG
             
-            batch = batch.to(device)
+            batch = batch["point_cloud"].to(device)
 
             optimizer.zero_grad()
             
@@ -55,12 +57,10 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
             code = encoder.sample_latent_z(mean, log_variance)
 
             timestep_batch = torch.randint(0, diffuser.T, (batch.shape[0],), device=device).long() #[B,]
-            # beta_batch = diffuser.beta[timestep_batch]
             
             noisy_pc, actual_noise = diffuser.add_noise(batch, timestep_batch)
             predicted_noise = denoiser(noisy_pc, timestep_batch, code)
 
-            # Loss calculation
             KLD_loss = encoder.KLD_loss(mean, log_variance)
 
             mse_loss_per_item = F.mse_loss(predicted_noise, actual_noise, reduction='none').mean(dim=[1, 2]) #[B]
@@ -82,65 +82,21 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
             train_loss_running += loss.item()
 
             #DEBUG
-            debug_file.write('train_loss_epoch_running: ' + str(train_loss_epoch_running) + '\n')
-            debug_file.flush()
+            # debug_file.write('train_loss_epoch_running: ' + str(train_loss_epoch_running) + '\n')
+            # debug_file.flush()
 
             iteration = epoch * len(trainloader) + i
 
+            # Train Loss
             if iteration % config['print_every_n'] == (config['print_every_n'] - 1):
                 print(f'[{epoch:02d}/{i:03d}] train_loss: {train_loss_running / config["print_every_n"]:.3f}')
-                writer_train.add_scalar("Train Loss", train_loss_running / config["print_every_n"], iteration*config['batch_size'])
+                writer_train.add_scalar("Loss/train", train_loss_running / config["print_every_n"], iteration*config['train_batch_size'])
                 train_loss_running = 0.
 
             # Average loss per timestep     
             for t_val, item_mse in zip(timestep_batch.tolist(), mse_loss_per_item.tolist()):
                 timestep_loss_sum[t_val] += item_mse
                 timestep_counts[t_val] += 1
-
-            # # validation evaluation and logging
-            # if iteration % config['validate_every_n'] == (config['validate_every_n'] - 1):
-
-            #     # set model to eval, important if your network has e.g. dropout or batchnorm layers
-            #     encoder.eval()
-            #     decoder.eval()
-
-            #     loss_total_val = 0
-            #     # forward pass and evaluation for entire validation set
-            #     for batch_val in valloader:
-            #         batch_val = batch_val.to(device)
-
-            #         with torch.no_grad():
-            #             mean, log_variance = encoder(batch_val)
-            #             code = encoder.sample_latent_z(mean, log_variance)
-
-            #             timestep_batch = torch.randint(0, diffuser.T, (batch.shape[0],), device=device).long()
-            #             beta_batch = diffuser.beta[timestep_batch]
-                        
-            #             noisy_pc, actual_noise = diffuser.add_noise(batch, timestep_batch)
-            #             predicted_noise = denoiser(noisy_pc, beta_batch, code)
-
-            #             # Loss calculation
-            #             KLD_loss = encoder.KLD_loss(mean, log_variance)
-
-            #             mse_loss_per_item = F.mse_loss(predicted_noise, actual_noise, reduction='none').mean(dim=[1, 2]) #[B]
-            #             MSE_loss = mse_loss_per_item.mean()
-
-            #             loss = MSE_loss + 0.01 * KLD_loss 
-
-            #         loss_total_val += loss.item()
-                
-            #     loss_val = loss_total_val / len(valloader)
-            #     print(f'[{epoch:03d}/{i:04d}] val_loss: {loss_val:.3f}')
-            #     writer_val.add_scalar("Val Loss", loss_val, iteration*config['batch_size'])
-
-            #     if loss_val < best_val_loss:
-            #         utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = 'best')
-            #         best_val_loss = loss_val
-
-            #     # set model back to train
-            #     encoder.train()
-            #     decoder.train()
-            
 
         # Average loss per timestep
         avg_error_list = []
@@ -172,33 +128,132 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
             if weight.grad is not None:
               writer_train.add_histogram(f"Gradients/{name}", weight.grad, epoch)
 
+        # VALIDATION
+        #___________________________________________________________________________________________________
+        if epoch % config['validate_every_n_epochs'] == (config['validate_every_n_epochs'] - 1):
+            
+            # For tracking loss per timestep
+            val_timestep_loss_sum = defaultdict(float)
+            val_timestep_counts = defaultdict(int)
+
+            encoder.eval()
+            decoder.eval()
+
+            loss_total_val = 0
+            for batch_val in valloader:
+                batch_val = batch_val["point_cloud"].to(device)
+
+                with torch.no_grad():
+                    mean, log_variance = encoder(batch_val)
+                    code = encoder.sample_latent_z(mean, log_variance)
+
+                    timestep_batch = torch.randint(0, diffuser.T, (batch_val.shape[0],), device=device).long()
+                    
+                    noisy_pc, actual_noise = diffuser.add_noise(batch_val, timestep_batch)
+                    predicted_noise = denoiser(noisy_pc, timestep_batch, code)
+
+                    KLD_loss = encoder.KLD_loss(mean, log_variance)
+
+                    mse_loss_per_item = F.mse_loss(predicted_noise, actual_noise, reduction='none').mean(dim=[1, 2]) #[B]
+                    MSE_loss = mse_loss_per_item.mean()
+
+                    loss = MSE_loss + 0.001 * KLD_loss 
+
+                loss_total_val += loss.item()
+            
+            # Val Loss
+            loss_val = loss_total_val / len(valloader)
+            print(f'[{epoch:03d}] val_loss: {loss_val:.3f}')
+            writer_val.add_scalar("Loss/val", loss_val, iteration*config['train_batch_size'])
+            
+            # Average loss per timestep     
+            for t_val, item_mse in zip(timestep_batch.tolist(), mse_loss_per_item.tolist()):
+                val_timestep_loss_sum[t_val] += item_mse
+                val_timestep_counts[t_val] += 1
+
+            avg_error_list = []
+            valid_timesteps = []
+            for time_val in range(diffuser.T):
+                if timestep_counts[time_val] > 0:
+                    avg_error = val_timestep_loss_sum[time_val] / val_timestep_counts[time_val]
+                    avg_error_list.append(avg_error)
+                    valid_timesteps.append(time_val)
+                    writer_val.add_scalar(f"Val MSE Timestep Error/Epoch_{epoch:03d}", avg_error, global_step=time_val)
+
+            # Chamfer
+            #___________________________________________________________________________________________________________________
+            number_of_points = 2048
+            DDIM_steps = 50
+            valset = valloader.dataset
+            avg_chamfer = 0.
+            for object_index in range(valset.real_length):
+                pc = valset[object_index]['point_cloud'].to(device).unsqueeze(0)
+                mean, log_variance = encoder(pc) # valset not in this function
+                code = encoder.sample_latent_z(mean, log_variance)
+
+                generated_pc_ddim = sample_ddim(decoder, code, n_points=number_of_points, steps=DDIM_steps, timesteps=config['timesteps'])
+                
+                dist, _ = chamfer_distance(valset[object_index].unsqueeze(0), generated_pc_ddim)
+                avg_chamfer += dist
+                print(f"Chamfer distance, Object{object_index}: {dist}")
+            avg_chamfer_dist = avg_chamfer / (valset.real_length)
+            print(f"Average Chamfer distance = {avg_chamfer_dist}")
+            writer_val.add_scalar("Average Chamfer Distance", avg_chamfer_dist, epoch)
+
+            if avg_chamfer_dist < best_chamfer_loss:
+                utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = 'best_chamfer')
+                best_chamfer_loss = avg_chamfer_dist
+                print('Best Chamfer Model:  ', best_chamfer_loss)
+
+            # Chamfer
+            #___________________________________________________________________________________________________________________
+
+
+            if loss_val < best_val_loss:
+                utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = 'best_val')
+                best_val_loss = loss_val
+                print('Best val Model:  ', best_val_loss)
+
+            encoder.train()
+            decoder.train()
+
+            # Clear dictionaries so the next epoch tracks completely fresh averages
+            val_timestep_loss_sum.clear()
+            val_timestep_counts.clear()
+        
+        # VALIDATION
+        #___________________________________________________________________________________________________
+
 
         train_loss_epoch = train_loss_epoch_running / len(trainloader)
         #DEBUG
-        debug_file.write('train_loss_epoch: ' + str(train_loss_epoch) + '\n')
-        debug_file.flush()
+        # debug_file.write('train_loss_epoch: ' + str(train_loss_epoch) + '\n')
+        # debug_file.flush()
         #DEBUG
+
         # Save model weights if the best loss is achieved  
         if  train_loss_epoch < best_train_loss:
-            utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = "best")
+            utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = "best_train")
             best_train_loss = train_loss_epoch
-            print('Best Model:  ', best_train_loss)
+            print('Best train Model:  ', best_train_loss)
             #DEBUG
-            debug_file.write('best_train_loss: ' + str(best_train_loss) + '\n')
-            debug_file.flush()
+            # debug_file.write('best_train_loss: ' + str(best_train_loss) + '\n')
+            # debug_file.flush()
             #DEBUG
 
         
         # Model epoch saving
-        # model_config['last_epoch'] = epoch
-        # utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = 'epoch' + str(epoch))
-
-        # visualization.plot_interactive_epochs(config)
-
+        model_config['last_epoch'] = epoch
+        utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = 'epoch' + str(epoch))
 
 
     print('Best Loss: ', best_train_loss)
     print('Best Val Loss: ', best_val_loss)
+
+
+
+
+
 
 if __name__ == "__main__":
 
@@ -211,7 +266,8 @@ if __name__ == "__main__":
     config = {
         'experiment_name': experiment_name,
         'device': 'cuda:0',
-        'batch_size': 16,
+        'train_batch_size': 16,
+        'val_batch_size': 16,
         'resume_ckpt': None,
         'learning_rate': 0.0004,
         'step_size': 10, # scheduler step, one step is one batch
@@ -219,7 +275,7 @@ if __name__ == "__main__":
         'max_epochs': 500,
         'timesteps': 1000,
         'print_every_n': 30, # every n batches
-        # 'validate_every_n': 10,
+        'validate_every_n_epochs': 10,
     }
 
     model_config = {
@@ -229,7 +285,6 @@ if __name__ == "__main__":
         'latent_dim': 32
     }
 
-    # declare device
     if torch.cuda.is_available() and config['device'].startswith('cuda'):
         device = torch.device(config['device'])
         print('Using device:', config['device'])
@@ -237,21 +292,24 @@ if __name__ == "__main__":
         device = torch.device('cpu')
         print('Using CPU')
 
-    # create dataloaders
-    trainset = dataset.Dataset('train', config['timesteps'])
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=config['batch_size'], shuffle=True, num_workers=0, pin_memory=True)
-    valset = dataset.Dataset('val', config['timesteps'])
-    valloader = torch.utils.data.DataLoader(valset, batch_size=config['batch_size'], shuffle=False, num_workers=0, pin_memory=True)
+    num_workers = max(1, os.cpu_count() - 2)
+    trainset = dataset.Dataset_new('train', config['timesteps'])
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=config['train_batch_size'], shuffle=True, num_workers=num_workers, pin_memory=True)
+    valset = dataset.Dataset_new('val', config['timesteps'])
+    valloader = torch.utils.data.DataLoader(valset, batch_size=config['val_batch_size'], shuffle=False, num_workers=num_workers, pin_memory=True)
 
-    encoder = Encoder(number_points=2048, in_channels=3, hidden_channels=model_config['enc_hidden_channels'], latent_dim=model_config['latent_dim'], clamp=False)
-    decoder = Decoder(number_points=2048, point_dim=3, hidden_dim=model_config['dec_hidden_dim'], latent_dim=model_config['latent_dim'], timesteps=config['timesteps'], beta_start=1e-4, beta_end=0.02)
+    encoder = Encoder(
+        number_points=2048, in_channels=3, 
+        hidden_channels=model_config['enc_hidden_channels'], latent_dim=model_config['latent_dim'], clamp=False)
+    decoder = Decoder(
+        number_points=2048, point_dim=3, 
+        hidden_dim=model_config['dec_hidden_dim'], latent_dim=model_config['latent_dim'], 
+        timesteps=config['timesteps'], beta_start=1e-4, beta_end=0.02)
 
-    # move model to specified device
     encoder.to(device)
     decoder.to(device)
     optimizer = torch.optim.Adam(list(encoder.parameters()) + list(decoder.parameters()), lr=config['learning_rate'])
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, config['step_size'], config['gamma'])
-    # scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.0006, steps_per_epoch=len(trainloader), epochs=config['max_epochs'], anneal_strategy='cos', three_phase=True)
 
 
     total_enc, trainable_enc = utils.count_parameters(encoder)
@@ -259,14 +317,17 @@ if __name__ == "__main__":
     print(f"Encoder Total: {total_enc:,} | Trainable: {trainable_enc:,} | Model size: {utils.model_memory_size(encoder):.3f} MB")
     print(f"Decoder Total: {total_dec:,} | Trainable: {trainable_dec:,} | Model size: {utils.model_memory_size(decoder):.3f} MB")
 
-    # start training
     torch.cuda.empty_cache()
     #tensorboard --logdir=diffusion_autoencoder/logs
-    # Create tensorboard writer    
-    log_path = pathlib.Path(f"logs/{datetime.datetime.now().strftime('%b%d')}/{config['experiment_name']}")
-    writer = SummaryWriter(log_path)
+    
+    train_log_path = pathlib.Path(f"logs/{datetime.datetime.now().strftime('%b%d')}/{config['experiment_name']}/train")
+    writer_train = SummaryWriter(train_log_path)
+    val_log_path = pathlib.Path(f"logs/{datetime.datetime.now().strftime('%b%d')}/{config['experiment_name']}/val")
+    writer_val = SummaryWriter(val_log_path)
 
     with open("debug.txt", "w", encoding="utf-8") as debug_file:
-        train.train(encoder, decoder, trainloader, None, device, optimizer, scheduler, config, model_config, writer, None, debug_file)
+        train(
+            encoder, decoder, trainloader, valloader, device, optimizer, scheduler, config, model_config, writer_train, writer_val, debug_file)
 
-    writer.close()
+    writer_train.close()
+    writer_val.close()
