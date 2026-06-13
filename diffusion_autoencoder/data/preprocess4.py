@@ -260,9 +260,10 @@ def build_dataset(args):
         return
 
     # 5. Multiprocessing Execution
-    print(f"Starting multiprocessing pool with {os.cpu_count() - 1} workers...")
+    num_workers = max(1, (os.cpu_count() or 1) - 1)
+    print(f"Starting multiprocessing pool with {num_workers} workers...")
     success_count = 0
-    with Pool(processes=os.cpu_count() - 1) as pool:
+    with Pool(processes=num_workers) as pool:
         results = pool.imap_unordered(process_object, args_list)
         for result in tqdm(results, total=len(args_list)):
             if result is not None:
