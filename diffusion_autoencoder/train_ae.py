@@ -96,9 +96,9 @@ parser.add_argument("--kl_start", type=float, default=1e-4)
 parser.add_argument("--kl_end", type=float, default=0.01)
 
 # Datasets and loaders
-parser.add_argument('--dataset_path', type=str, default="../data/preprocessed/preprocessing1")
-parser.add_argument('--train_batch_size', type=int, default=1)
-parser.add_argument('--val_batch_size', type=int, default=1)
+parser.add_argument('--dataset_path', type=str, default="../data/preprocessed/preprocessing5")
+parser.add_argument('--train_batch_size', type=int, default=3)
+parser.add_argument('--val_batch_size', type=int, default=3)
 
 # Optimizer and scheduler
 parser.add_argument('--lr', type=float, default=1e-3)
@@ -125,7 +125,7 @@ torch.manual_seed(args.seed)
 #declare logger
 logger = Logger()
 logger(f"AutoEncoder(number_points={args.num_points}, point_dim=3, hidden_dim={args.hidden_dim}, latent_dim={args.latent_dim}, num_steps={args.num_steps},\
-       beta_1={args.beta_1}, beta_T={args.beta_T}, kl_start={args.kl_start})")
+beta_1={args.beta_1}, beta_T={args.beta_T}, kl_start={args.kl_start})")
 log_args(logger, args)
 
 # Declare device
@@ -243,7 +243,7 @@ def train(train_batch, val_batch):
 
     return loss.item(), val_loss.item(), kld_loss.item(), orig_grad_norm
     
-
+# Train the model if dry_run == false
 if args.dry_run == False:
     patience = 0
     previous_val_loss = 1e6
@@ -294,22 +294,41 @@ if args.dry_run == False:
             print(f"Epoch: {i+1}\tTraining Loss: {epoch_train_loss:.3f}\tVal Loss: {epoch_val_loss:.3f}\tKLD Loss: {epoch_kld_loss:.3f}")
             logger(f"Epoch: {i+1}\tTraining Loss: {epoch_train_loss:.3f}\tVal Loss: {epoch_val_loss:.3f}\tKLD Loss: {epoch_kld_loss:.3f}")
 
+    # calculating the accuracy of the model with the test dataset
+    running_test_accuracy_latents = 0
+    running_test_accuracy_means = 0
+    model.eval()
+    for batch in test_dl:
+        latents, mean, _ = model.encode(batch)
+        pred_pc_latents = model.decode(latents, args.num_points)
+        pred_pc_means = model.decode(mean, args.num_points)
+        chamfer_latents, _ = chamfer_distance(batch, pred_pc_latents)
+        chamfer_means, _ = chamfer_distance(batch, pred_pc_means)
+        if bool(chamfer_latents.shape):
+            chamfer_latents = chamfer_latents.mean(dim=0)
+            chamfer_means = chamfer_means.mean(dim=0)
         
+        running_test_accuracy_latents += chamfer_latents.detach().cpu().numpy()
+        running_test_accuracy_means += chamfer_means.detach().cpu().numpy()
+    
+    logger(f"\nTest Accuracy with latents: {running_test_accuracy_latents / len(test_dl):.3f}")
+    logger(f"Test Accuracy with means: {running_test_accuracy_means / len(test_dl):.3f}\n") 
 
     torch.save(model.state_dict(), save_path + "/end_model.pt")
     logger("Saving model at end of training: " + save_path + "/end_model.pt")
     logger(f"Val loss of model at end of training: {val_loss_history[-1]:.3f}")
+    
+    logger("Saving Plot: " + save_path + "/loss_history.png")
+    logger.write_log_file(save_path)
     fig = plt.figure(figsize=(15, 10))
     ax = fig.add_subplot(1, 1, 1)
     ax.plot(train_loss_history, color="b", label="Train Loss")
     ax.plot(val_loss_history, color="r", label="Val Loss")
     ax.plot(kld_loss_history, color="m", label="KLD Loss")
     plt.legend()
-    plt.savefig(save_path + "/loss_history.png")
-    plt.show()
     fig.savefig(save_path + "/loss_history.png")
-    logger("Saving Plot: " + save_path + "/loss_history.png")
-    logger.write_log_file(save_path)
+    plt.show()
+ 
 
 
 

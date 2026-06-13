@@ -48,7 +48,7 @@ def get_random_shapenet_meshes(seed: int, num_objects: int, root: Path) -> list[
     # 5. Sample and return
     return random.sample(all_meshes, k)
 
-def get_random_preprocessed_meshes(seed:int, num_objects:int, root:Path) -> list[Path]:
+def get_preprocessed_meshes(root:Path) -> list[Path]:
     """   
     Navigates the ShapeNet hierarchy to return a random list of mesh paths.
     
@@ -65,11 +65,9 @@ def get_random_preprocessed_meshes(seed:int, num_objects:int, root:Path) -> list
         print("No mesh.obj files found in the specified hierarchy.")
         return []
     
-    random.seed(seed)
+
     
-    k = min(num_objects, len(all_meshes))
-    
-    return random.sample(all_meshes, k)
+    return all_meshes
 
 def normalize_points_max(pcs):
     # Centering: Subtract the mean of the points
@@ -174,18 +172,19 @@ if __name__ == "__main__":
     #number_meshes, mesh_list = count_meshes("../../../GraspDataset")
     #print(number_meshes)
     #print(mesh_list[:3])
-    preprocessing_nr = 5
+    preprocessing_nr = 6
     root = Path("../")
     mesh_list = []
     point_cloud_list = []
-    random_meshes = get_random_preprocessed_meshes(seed=42, root=root, num_objects=1e6)
-    for file in random_meshes:
+    meshes = get_preprocessed_meshes(root=root)
+    for file in meshes:
+        print("Loading Mesh " + str(file))
         mesh_list.append(trimesh.load_mesh(file, force="mesh", skip_materials=True))
         
     for index, mesh in enumerate(mesh_list):
         output_path = root / Path("data/preprocessed/preprocessing" + str(preprocessing_nr) + "/mesh" + f"{index}".zfill(5) + ".obj")
-        mesh.export(output_path)
         print(f"Save mesh to output path: {output_path}")
+        mesh.export(output_path)
         point_cloud_list.append(mesh.sample(2048))
     
     point_cloud_array = np.stack(point_cloud_list, axis=0)
