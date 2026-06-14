@@ -26,9 +26,10 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
     denoiser = decoder.denoiser
 
 
-    best_train_loss = 10
-    best_chamfer_loss = 10
-    best_val_loss = 10
+    best_train_loss = 0.1
+    best_chamfer_loss = 0.1
+    best_val_loss = 0.1
+    best_integral = 80
 
     train_loss_running = 0.
 
@@ -89,8 +90,8 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
 
             # Train Loss
             if iteration % config['print_every_n'] == (config['print_every_n'] - 1):
-                print(f'[{epoch:02d}/{i:03d}] train_loss: {train_loss_running / config["print_every_n"]:.3f}')
-                writer_train.add_scalar("Loss/train", train_loss_running / config["print_every_n"], iteration*config['train_batch_size'])
+                print(f'[{epoch:03d}/{i:03d}] train_loss: {train_loss_running / config["print_every_n"]:.3f}')
+                writer_train.add_scalar("Loss", train_loss_running / config["print_every_n"], iteration*config['train_batch_size'])
                 train_loss_running = 0.
 
             # Average loss per timestep     
@@ -111,7 +112,11 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
         # Calculate the integral of the average mse per timestep
         MSE_per_timestep_integral = trapezoid(np.array(avg_error_list), np.array(valid_timesteps))
         writer_train.add_scalar(f"MSE per Timestep Integral", MSE_per_timestep_integral, epoch)
-        print("MSE per timestep integral: ", MSE_per_timestep_integral)
+        # print(f"[{epoch:03d}] integral: {MSE_per_timestep_integral:.05}")
+        if MSE_per_timestep_integral < best_integral:
+                utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = 'best_integral')
+                best_integral = MSE_per_timestep_integral
+                # print(f'Best  Model:  {best_chamfer_loss:.05f}')
 
         # Clear dictionaries so the next epoch tracks completely fresh averages
         timestep_loss_sum.clear()
@@ -164,7 +169,7 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
             # Val Loss
             loss_val = loss_total_val / len(valloader)
             print(f'[{epoch:03d}] val_loss: {loss_val:.3f}')
-            writer_val.add_scalar("Loss/val", loss_val, iteration*config['train_batch_size'])
+            writer_val.add_scalar("Loss", loss_val, iteration*config['train_batch_size'])
             
             # Average loss per timestep     
             for t_val, item_mse in zip(timestep_batch.tolist(), mse_loss_per_item.tolist()):
@@ -186,24 +191,25 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
             DDIM_steps = 50
             valset = valloader.dataset
             avg_chamfer = 0.
-            for object_index in range(valset.real_length):
-                pc = valset[object_index]['point_cloud'].to(device).unsqueeze(0)
-                mean, log_variance = encoder(pc) # valset not in this function
-                code = encoder.sample_latent_z(mean, log_variance)
+            with torch.no_grad():
+                for object_index in range(valset.real_length):
+                    pc = valset[object_index]['point_cloud'].to(device).unsqueeze(0)
+                    mean, log_variance = encoder(pc) # valset not in this function
+                    code = encoder.sample_latent_z(mean, log_variance)
 
-                generated_pc_ddim = sample_ddim(decoder, code, n_points=number_of_points, steps=DDIM_steps, timesteps=config['timesteps'])
-                
-                dist, _ = chamfer_distance(valset[object_index].unsqueeze(0), generated_pc_ddim)
-                avg_chamfer += dist
-                print(f"Chamfer distance, Object{object_index}: {dist}")
+                    generated_pc_ddim = sample_ddim(decoder, code, n_points=number_of_points, steps=DDIM_steps, timesteps=config['timesteps'])
+                    
+                    dist = chamfer_distance(pc, generated_pc_ddim).item()
+                    avg_chamfer += dist
+                    # print(f"Chamfer distance, Object{object_index}: {dist}")
             avg_chamfer_dist = avg_chamfer / (valset.real_length)
-            print(f"Average Chamfer distance = {avg_chamfer_dist}")
+            print(f"[{epoch:03d}] avg_chamf: {avg_chamfer_dist:.05f}")
             writer_val.add_scalar("Average Chamfer Distance", avg_chamfer_dist, epoch)
 
             if avg_chamfer_dist < best_chamfer_loss:
                 utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = 'best_chamfer')
                 best_chamfer_loss = avg_chamfer_dist
-                print('Best Chamfer Model:  ', best_chamfer_loss)
+                print(f'Best Chamfer Model:  {best_chamfer_loss:.05f}')
 
             # Chamfer
             #___________________________________________________________________________________________________________________
@@ -212,7 +218,7 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
             if loss_val < best_val_loss:
                 utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = 'best_val')
                 best_val_loss = loss_val
-                print('Best val Model:  ', best_val_loss)
+                print(f'Best val Model:  {best_val_loss:.05f}')
 
             encoder.train()
             decoder.train()
@@ -235,20 +241,21 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
         if  train_loss_epoch < best_train_loss:
             utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = "best_train")
             best_train_loss = train_loss_epoch
-            print('Best train Model:  ', best_train_loss)
+            print(f"Best train Model: {best_train_loss:.03f}")
             #DEBUG
             # debug_file.write('best_train_loss: ' + str(best_train_loss) + '\n')
             # debug_file.flush()
             #DEBUG
 
         
-        # Model epoch saving
+        # Checkpoint saving
         model_config['last_epoch'] = epoch
-        utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = 'epoch' + str(epoch))
+        utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = 'checkpoint')
 
 
     print('Best Loss: ', best_train_loss)
     print('Best Val Loss: ', best_val_loss)
+    print('Best Chamfer Model:  ', best_chamfer_loss)
 
 
 
@@ -259,23 +266,24 @@ if __name__ == "__main__":
 
     # Model name
     current_time = datetime.datetime.now().strftime("%b%d_%H-%M")
-    denoiser_name = "10_Objects_1000timestep_500epochs_6latent_16batch_KL0.001_hidden_dec128"
+    denoiser_name = "10_Objects_200epochs_32latent_enc64_dec128"
+    # denoiser_name = "TEST"
     experiment_name = f"{current_time}_{denoiser_name}"
 
 
     config = {
         'experiment_name': experiment_name,
         'device': 'cuda:0',
-        'train_batch_size': 16,
-        'val_batch_size': 16,
+        'train_batch_size': 128,
+        'val_batch_size': 128,
         'resume_ckpt': None,
         'learning_rate': 0.0004,
         'step_size': 10, # scheduler step, one step is one batch
         'gamma': 1,
-        'max_epochs': 500,
+        'max_epochs': 200,
         'timesteps': 1000,
         'print_every_n': 30, # every n batches
-        'validate_every_n_epochs': 10,
+        'validate_every_n_epochs': 2,
     }
 
     model_config = {
@@ -292,7 +300,7 @@ if __name__ == "__main__":
         device = torch.device('cpu')
         print('Using CPU')
 
-    num_workers = max(1, os.cpu_count() - 2)
+    num_workers = max(1, os.cpu_count() - 1)
     trainset = dataset.Dataset_new('train', config['timesteps'])
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=config['train_batch_size'], shuffle=True, num_workers=num_workers, pin_memory=True)
     valset = dataset.Dataset_new('val', config['timesteps'])
@@ -318,7 +326,7 @@ if __name__ == "__main__":
     print(f"Decoder Total: {total_dec:,} | Trainable: {trainable_dec:,} | Model size: {utils.model_memory_size(decoder):.3f} MB")
 
     torch.cuda.empty_cache()
-    #tensorboard --logdir=diffusion_autoencoder/logs
+    #tensorboard --logdir=logs
     
     train_log_path = pathlib.Path(f"logs/{datetime.datetime.now().strftime('%b%d')}/{config['experiment_name']}/train")
     writer_train = SummaryWriter(train_log_path)

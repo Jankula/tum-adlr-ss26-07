@@ -61,7 +61,7 @@ class Dataset_new(Dataset):
     Dataset for loading normalized point clouds as .npz files into RAM.
     """
     # Adjust this path to match your actual output directory from the preprocessing script
-    dataset_path = Path("data") 
+    dataset_path = Path("/home/nikola/tum-adlr-ss26-07/diffusion_autoencoder/data") 
 
     def __init__(self, split, timesteps):
         """

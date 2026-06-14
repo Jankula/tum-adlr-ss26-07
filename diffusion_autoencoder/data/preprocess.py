@@ -288,15 +288,15 @@ if __name__ == "__main__":
     
     parser.add_argument("--process-all", action="store_true")
 
-    parser.add_argument("--num-train", type=int, default=100)
-    parser.add_argument("--num-val", type=int, default=10)
-    parser.add_argument("--num-test", type=int, default=10)
+    parser.add_argument("--num-train", type=int, default=10)
+    parser.add_argument("--num-val", type=int, default=2)
+    parser.add_argument("--num-test", type=int, default=2)
     
     parser.add_argument("--train-ratio", type=float, default=0.8)
     parser.add_argument("--val-ratio", type=float, default=0.1)
     parser.add_argument("--test-ratio", type=float, default=0.1)
     
-    parser.add_argument("--num-grasps-per-object", type=int, default=3)
+    parser.add_argument("--num-grasps-per-object", type=int, default=1)
     parser.add_argument("--num-sample-points", type=int, default=2048)
     parser.add_argument("--max-num-vertices", type=int, default=2048)
     
