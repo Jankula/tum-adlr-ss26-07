@@ -43,7 +43,7 @@ def interactive_latent_explorer(z1, z2, input_queue, output_queue, num_ddim_step
 
     # --- UI Elements Initialization ---
     steps_input = gui.TextEdit()
-    steps_input.text_value = "10"
+    steps_input.text_value = "4"
     steps_input.placeholder_text = "Enter total steps (e.g., 10)"
 
     status_label = gui.Label("Current Position: z1")
@@ -176,7 +176,7 @@ def interactive_latent_explorer(z1, z2, input_queue, output_queue, num_ddim_step
     gui.Application.instance.run()
 
 
-def gpu_diffusion_worker(input_queue, output_queue, experiment_name, model_type):
+def gpu_diffusion_worker(input_queue, output_queue, experiment_name, model_type, timesteps):
     """Background process dedicated entirely to the Nvidia GPU."""
     device = torch.device('cuda:0')
     
@@ -203,7 +203,7 @@ def gpu_diffusion_worker(input_queue, output_queue, experiment_name, model_type)
         
         with torch.no_grad():
             from decoder import sample_ddim
-            points_tensor = sample_ddim(decoder, z_tensor, 2048, num_ddim_steps)
+            points_tensor = sample_ddim(decoder, z_tensor, 2048, num_ddim_steps, timesteps)
             points = points_tensor.squeeze(0).cpu().numpy()
         
         output_queue.put(points)
@@ -217,13 +217,6 @@ def main(experiment_name, model_type, split_type, object_index1, object_index2):
     input_queue = mp.Queue()
     output_queue = mp.Queue()
     
-    print("Spawning isolated PyTorch GPU Worker...")
-    worker = mp.Process(target=gpu_diffusion_worker, args=(input_queue, output_queue, experiment_name, model_type))
-    worker.start()
-    
-    # Wait for the model to finish loading into VRAM
-    output_queue.get() 
-    print("GPU Worker Ready! Extracting baseline latent codes...")
     
     # Extract the z1 and z2 baselines on the CPU
     device_cpu = torch.device('cpu')
@@ -232,7 +225,18 @@ def main(experiment_name, model_type, split_type, object_index1, object_index2):
     encoder_cpu = Encoder(number_points=2048, in_channels=3, hidden_channels=64, latent_dim=32, clamp=False)
     decoder_cpu = Decoder(number_points=2048, point_dim=3, hidden_dim=128, latent_dim=32, timesteps=1000, beta_start=1e-4, beta_end=0.02)
     
-    _, _, encoder_cpu, _ = utils.reload_model(None, None, experiment_name, model_type, device_cpu)
+    config, _, encoder_cpu, _ = utils.reload_model(None, None, experiment_name, model_type, device_cpu)
+    
+    timesteps = config['timesteps']
+
+    print("Spawning isolated PyTorch GPU Worker...")
+    worker = mp.Process(target=gpu_diffusion_worker, args=(input_queue, output_queue, experiment_name, model_type, timesteps))
+    worker.start()
+    
+    # Wait for the model to finish loading into VRAM
+    output_queue.get() 
+    print("GPU Worker Ready! Extracting baseline latent codes...")
+    
     encoder_cpu.eval()
     
     with torch.no_grad():
@@ -254,7 +258,7 @@ def main(experiment_name, model_type, split_type, object_index1, object_index2):
 if __name__ == "__main__":
     # Standardize input injection via argparse for reusability from the CLI
     parser = argparse.ArgumentParser(description="Latent Space Interpolation Viewer")
-    parser.add_argument("--experiment_name", type=str, default="Jun06_11-46_8_Objects_500timestep_200epochs_16batch_KL0.001_hidden_dec128_time_emb")
+    parser.add_argument("--experiment_name", type=str, default="Jun06_19-58_8_Objects_100timestep_1000epochs_16batch_KL0.001_hidden_dec128_time_emb")
     parser.add_argument("--type", type=str, default="best")
     parser.add_argument("--split_type", type=str, default="train")
     parser.add_argument("--object_index1", type=int, default=0, help="Dataset index for starting latent vector z1")

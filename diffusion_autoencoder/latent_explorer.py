@@ -6,6 +6,7 @@ import dataset
 import utils
 import numpy as np
 import open3d as o3d
+import argparse
 import open3d.visualization.gui as gui
 import open3d.visualization.rendering as rendering
 
@@ -193,7 +194,7 @@ def interactive_latent_explorer(z_0, input_queue, output_queue, num_ddim_steps=5
     gui.Application.instance.run()
 
 
-def gpu_diffusion_worker(input_queue, output_queue):
+def gpu_diffusion_worker(input_queue, output_queue, experiment_name, type, timesteps):
     """Background process dedicated entirely to the Nvidia GPU."""
     # 1. Initialize CUDA inside the isolated process
     device = torch.device('cuda:0')
@@ -201,8 +202,7 @@ def gpu_diffusion_worker(input_queue, output_queue):
     encoder = Encoder(number_points=2048, in_channels=3, hidden_channels=64, latent_dim=32, clamp=False)
     decoder = Decoder(number_points=2048, point_dim=3, hidden_dim=128, latent_dim=32, timesteps=1000, beta_start=1e-4, beta_end=0.02)
     
-    experiment_name = "Jun04_02-43_3_Objects_50epochs_16batch_KL0.001_hidden_dec128_time_emb"
-    utils.reload_model_old(encoder, decoder, None, None, experiment_name, 'best', device)
+    _,_,encoder, decoder = utils.reload_model(None, None, experiment_name, type, device)
     
     encoder.to(device)
     decoder.to(device)
@@ -223,53 +223,52 @@ def gpu_diffusion_worker(input_queue, output_queue):
         
         with torch.no_grad():
             from decoder import sample_ddim
-            points_tensor = sample_ddim(decoder, z_tensor, 2048, num_ddim_steps)
+            points_tensor = sample_ddim(decoder, z_tensor, 2048, num_ddim_steps, timesteps)
             points = points_tensor.squeeze(0).cpu().numpy()
         
         # Send the generated point cloud back to the UI
         output_queue.put(points)
 
 
-def main():
+def main(experiment_name, model_type, split_type, object_index):
+    
+    # experiment_name = "Jun04_21-14_8_Objects_100epochs_16batch_KL0.001_hidden_dec128_time_emb"
+    # type = 'best'
+    # split_type = 'train'
+    # object_index = 0
+    
     # Force 'spawn' method to ensure clean CUDA isolation on Linux
     mp.set_start_method('spawn', force=True)
     
     input_queue = mp.Queue()
     output_queue = mp.Queue()
     
-    print("Spawning isolated PyTorch GPU Worker...")
-    worker = mp.Process(target=gpu_diffusion_worker, args=(input_queue, output_queue))
-    worker.start()
     
-    # Wait for the model to finish loading into VRAM
-    output_queue.get() 
-    print("GPU Worker Ready! Extracting baseline latent code...")
-    
-    # Extract the z_0 baseline on the CPU so we don't dirty the main thread's GPU context
-    # device_cpu = torch.device('cpu')
-    # trainset = dataset.Dataset('overfit', timesteps=1000)
-    # encoder_cpu = Encoder(number_points=2048, in_channels=3, hidden_channels=64, latent_dim=32, clamp=False)
-    # utils.reload_model(encoder_cpu, None, None, None, "Jun04_02-43_3_Objects_50epochs_16batch_KL0.001_hidden_dec128_time_emb", 'best', device_cpu)
-    # encoder_cpu.eval()
-
     # Extract the z_0 baseline on the CPU so we don't dirty the main thread's GPU context
     device_cpu = torch.device('cpu')
-    trainset = dataset.Dataset('overfit', timesteps=1000)
+    trainset = dataset.Dataset(split_type, timesteps=1000)
     encoder_cpu = Encoder(number_points=2048, in_channels=3, hidden_channels=64, latent_dim=32, clamp=False)
     
     # Initialize a dummy CPU decoder just to satisfy utils.reload_model
     decoder_cpu = Decoder(number_points=2048, point_dim=3, hidden_dim=128, latent_dim=32, timesteps=1000, beta_start=1e-4, beta_end=0.02)
     
     # Pass the dummy decoder instead of None
-    utils.reload_model_old(encoder_cpu, decoder_cpu, None, None, "Jun04_02-43_3_Objects_50epochs_16batch_KL0.001_hidden_dec128_time_emb", 'best', device_cpu)
+    
+    config,_,encoder_cpu, decoder_cpu = utils.reload_model(None, None, experiment_name, model_type, device_cpu)
+
+    timesteps = config['timesteps']
+    print("Spawning isolated PyTorch GPU Worker...")
+    worker = mp.Process(target=gpu_diffusion_worker, args=(input_queue, output_queue, experiment_name, model_type, timesteps))
+    worker.start()
+    
+    # Wait for the model to finish loading into VRAM
+    output_queue.get() 
+    print("GPU Worker Ready! Extracting baseline latent code...")
     
     encoder_cpu.eval()
     
-    # with torch.no_grad():
-    #     mean, _ = encoder_cpu(trainset[0].unsqueeze(0))
-
     with torch.no_grad():
-        mean, _ = encoder_cpu(trainset[0].unsqueeze(0).to(device_cpu))
+        mean, _ = encoder_cpu(trainset[object_index].unsqueeze(0).to(device_cpu))
     
     print("Launching Open3D UI...")
     # Launch UI, passing the queues instead of the decoder model!
@@ -281,4 +280,13 @@ def main():
     print("Processes shutdown cleanly.")
 
 if __name__ == "__main__":
-    main()
+    # Standardize input injection via argparse for reusability from the CLI
+    parser = argparse.ArgumentParser(description="Latent Space Interpolation Viewer")
+    parser.add_argument("--experiment_name", type=str, default="Jun06_19-58_8_Objects_100timestep_1000epochs_16batch_KL0.001_hidden_dec128_time_emb")
+    parser.add_argument("--type", type=str, default="best")
+    parser.add_argument("--split_type", type=str, default="train")
+    parser.add_argument("--object_index", type=int, default=0, help="Dataset index for starting latent vector z0")
+    
+    args = parser.parse_args()
+    
+    main(args.experiment_name, args.type, args.split_type, args.object_index)
