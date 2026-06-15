@@ -1,0 +1,90 @@
+AutoEncoder(number_points=256, point_dim=3, hidden_dim=128, latent_dim=256, num_steps=200,beta_1=0.0001, beta_T=0.05, kl_start=0.0001)
+Argparser Arguments:
+Model arguments:
+latent_dim: 256
+num_steps: 200
+beta_1: 0.0001
+beta_T: 0.05
+sched_mode: linear
+flexibility: 0.0
+Training with new model:
+num_points: 256
+hidden_dim: 128
+save_path: ./models
+kl_start: 0.0001
+kl_end: 0.01
+Datset and Dataloader Arguments:
+datset_path: ../../../GraspDataset/data/preprocessed/preprocessing5
+train_batch_size: 3
+val_batch_size: 3
+Arguments of Optimizer and Scheduler:
+lr: 0.001
+weight_decay: 0
+max_grad_norm: 10
+end_lr: 0.0001
+sched_start_epoch: 5
+sched_end_epoch: 10
+Training Arguments:
+seed: 42
+logging: True
+log_root: ./logs_ae
+dry_run: False
+patience: 10
+num_epochs: 5
+Using device: cpu
+
+Checking Paths
+
+Path ../../../GraspDataset/data/preprocessed/preprocessing5 exists
+Path ./models exists
+
+Creating save Path: ./models/Jun_Mon_11_09_54
+
+creating log path: ./models/Jun_Mon_11_09_54./logs_ae
+
+Size of the whole Training Dataset: 45
+
+Dataset Sizes after splitting:
+Training Size 36	|	 Val Size 4	|	Test Size 5
+
+Dataloader Sizes after Splitting:
+Training_DL Size 12	|	 Val_DL Size 1	|	Test_DL Size 2
+
+
+Building new Model with num_points: 256, hidden_dim: 128, latent_dim: 256           
+num_steps: 200, beta_1: 0.0001, beta_T: 0.05, kl_start: 0.0001, kl_end: 0.01
+
+
+Number of Trainable Parameters: 3.10M
+
+Using Starting Learning Rate: 0.001 and Weight Decay: 0
+
+Scheduler Parameters:
+Start Epoch: 5
+End Epoch: 10
+Learning Rate: 0.001End Learning Rate: 0.0001
+
+Starting training with 5 epochs
+
+Saving new best model at Epoch: 1
+Val loss of the best model: 21.141
+
+Saving new best model at Epoch: 2
+Val loss of the best model: 15.547
+
+Saving new best model at Epoch: 3
+Val loss of the best model: 11.783
+
+Saving new best model at Epoch: 4
+Val loss of the best model: 11.168
+
+Saving new best model at Epoch: 5
+Val loss of the best model: 10.044
+
+
+Test Accuracy with latents: 2.546
+Test Accuracy with means: 1.067
+
+Saving model at end of training: ./models/Jun_Mon_11_09_54/end_model.pt
+Val loss of model at end of training: 10.044
+Saving Plot: ./models/Jun_Mon_11_09_54/loss_history.png

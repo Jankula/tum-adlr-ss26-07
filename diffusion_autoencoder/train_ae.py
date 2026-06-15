@@ -96,25 +96,25 @@ parser.add_argument("--kl_start", type=float, default=1e-4)
 parser.add_argument("--kl_end", type=float, default=0.01)
 
 # Datasets and loaders
-parser.add_argument('--dataset_path', type=str, default="../data/preprocessed/preprocessing5")
-parser.add_argument('--train_batch_size', type=int, default=3)
-parser.add_argument('--val_batch_size', type=int, default=3)
+parser.add_argument('--dataset_path', type=str, default="../../../GraspDataset/data/preprocessed/preprocessing5")
+parser.add_argument('--train_batch_size', type=int, default=128)
+parser.add_argument('--val_batch_size', type=int, default=32)
 
 # Optimizer and scheduler
 parser.add_argument('--lr', type=float, default=1e-3)
 parser.add_argument('--weight_decay', type=float, default=0)
 parser.add_argument('--max_grad_norm', type=float, default=10)
 parser.add_argument('--end_lr', type=float, default=1e-4)
-parser.add_argument('--sched_start_epoch', type=int, default=5)
-parser.add_argument('--sched_end_epoch', type=int, default=10)
+parser.add_argument('--sched_start_epoch', type=int, default=2000)
+parser.add_argument('--sched_end_epoch', type=int, default=5000)
 
 # Training
 parser.add_argument('--seed', type=int, default=42)
 parser.add_argument('--logging', type=eval, default=True, choices=[True, False])
 parser.add_argument('--log_root', type=str, default='./logs_ae')
 parser.add_argument("--dry_run", default=False, type=bool, choices=[True, False])
-parser.add_argument("--patience", type=int, default=10)
-parser.add_argument("--num_epochs", type=int, default=10)
+parser.add_argument("--patience", type=int, default=100)
+parser.add_argument("--num_epochs", type=int, default=5000)
 args = parser.parse_args()
 print("Arguments parsed")
 

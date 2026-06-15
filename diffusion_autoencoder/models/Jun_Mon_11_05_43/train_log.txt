@@ -14,7 +14,7 @@ save_path: ./models
 kl_start: 0.0001
 kl_end: 0.01
 Datset and Dataloader Arguments:
-datset_path: ../data/preprocessed/preprocessing5
+datset_path: ../../../GraspDataset/data/preprocessed/preprocessing5
 train_batch_size: 3
 val_batch_size: 3
 Arguments of Optimizer and Scheduler:
@@ -35,12 +35,12 @@ Using device: cpu
 
 Checking Paths
 
-Path ../data/preprocessed/preprocessing5 exists
+Path ../../../GraspDataset/data/preprocessed/preprocessing5 exists
 Path ./models exists
 
-Creating save Path: ./models/Jun_Wed_14_52_39
+Creating save Path: ./models/Jun_Mon_11_05_43
 
-creating log path: ./models/Jun_Wed_14_52_39./logs_ae
+creating log path: ./models/Jun_Mon_11_05_43./logs_ae
 
 Size of the whole Training Dataset: 45
 
@@ -97,6 +97,6 @@ Val loss of the best model: 6.310
 Test Accuracy with latents: 1.088
 Test Accuracy with means: 1.117
 
-Saving model at end of training: ./models/Jun_Wed_14_52_39/end_model.pt
+Saving model at end of training: ./models/Jun_Mon_11_05_43/end_model.pt
 Val loss of model at end of training: 6.310
-Saving Plot: ./models/Jun_Wed_14_52_39/loss_history.png
+Saving Plot: ./models/Jun_Mon_11_05_43/loss_history.png
