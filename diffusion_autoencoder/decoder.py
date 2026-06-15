@@ -241,20 +241,20 @@ def sample_ddim(decoder, code, n_points=2048, steps=50):
         prev_t = times[i+1].unsqueeze(0) if i+1 < len(times) else torch.tensor([-1])
         prev_t = prev_t.to(device)
         
-        # 1. Predict noise
+        # Predict noise
         pred_noise = denoiser(x, beta, code)
         
-        # 2. Get alpha values for current and previous step
+        # Get alpha values for current and previous step
         alpha_t = diffuser.alpha_cumprod[t]
         alpha_prev = diffuser.alpha_cumprod[prev_t] if prev_t >= 0 else torch.tensor([1.0], device=device)
         
-        # 3. Calculate "predicted x0" (the clean shape)
+        # Calculate "predicted x0" (the clean shape)
         pred_x0 = (x - torch.sqrt(1 - alpha_t) * pred_noise) / torch.sqrt(alpha_t)
         
-        # 4. Calculate direction pointing to x_t
+        # Calculate direction pointing to x_t
         direction_xt = torch.sqrt(1 - alpha_prev) * pred_noise
         
-        # 5. Update x
+        # Update x
         x = torch.sqrt(alpha_prev) * pred_x0 + direction_xt
         
     return x

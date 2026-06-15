@@ -28,7 +28,7 @@ class Dataset(torch.utils.data.Dataset):
         :param split: one of 'train', 'val' or 'overfit' - for training, validation or overfitting split
         """
         super().__init__()
-        assert split in ['train', 'val', 'overfit']
+        assert split in ['train', 'val', 'overfit', 'test']
         self.timesteps = timesteps
         self.split = split
         self.item_names = Path(f"data/splits/{split}.txt").read_text().splitlines()
@@ -50,7 +50,10 @@ class Dataset(torch.utils.data.Dataset):
         """
         :return: length of the dataset
         """
-        return self.timesteps
+        if self.split == 'test':
+            return len(self.items)
+        else:
+            return self.timesteps
 
 
     @staticmethod
