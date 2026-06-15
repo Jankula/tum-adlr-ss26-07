@@ -26,11 +26,6 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
     denoiser = decoder.denoiser
 
 
-    best_train_loss = 0.1
-    best_chamfer_loss = 0.1
-    best_val_loss = 0.1
-    best_integral = 80
-
     train_loss_running = 0.
 
     # For tracking loss per timestep
@@ -113,9 +108,9 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
         MSE_per_timestep_integral = trapezoid(np.array(avg_error_list), np.array(valid_timesteps))
         writer_train.add_scalar(f"MSE per Timestep Integral", MSE_per_timestep_integral, epoch)
         # print(f"[{epoch:03d}] integral: {MSE_per_timestep_integral:.05}")
-        if MSE_per_timestep_integral < best_integral:
+        if MSE_per_timestep_integral < model_config['best_integral']:
+                model_config['best_integral'] = MSE_per_timestep_integral
                 utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = 'best_integral')
-                best_integral = MSE_per_timestep_integral
                 # print(f'Best  Model:  {best_chamfer_loss:.05f}')
 
         # Clear dictionaries so the next epoch tracks completely fresh averages
@@ -206,19 +201,19 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
             print(f"[{epoch:03d}] avg_chamf: {avg_chamfer_dist:.05f}")
             writer_val.add_scalar("Average Chamfer Distance", avg_chamfer_dist, epoch)
 
-            if avg_chamfer_dist < best_chamfer_loss:
+            if avg_chamfer_dist < model_config['best_chamfer_loss']:
+                model_config['best_chamfer_loss'] = avg_chamfer_dist
                 utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = 'best_chamfer')
-                best_chamfer_loss = avg_chamfer_dist
-                print(f'Best Chamfer Model:  {best_chamfer_loss:.05f}')
+                print(f"Best Chamfer Model:  {model_config['best_chamfer_loss']:.05f}")
 
             # Chamfer
             #___________________________________________________________________________________________________________________
 
 
-            if loss_val < best_val_loss:
+            if loss_val < model_config['best_val_loss']:
+                model_config['best_val_loss'] = loss_val
                 utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = 'best_val')
-                best_val_loss = loss_val
-                print(f'Best val Model:  {best_val_loss:.05f}')
+                print(f"Best val Model:  {model_config['best_val_loss']:.05f}")
 
             encoder.train()
             decoder.train()
@@ -238,10 +233,10 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
         #DEBUG
 
         # Save model weights if the best loss is achieved  
-        if  train_loss_epoch < best_train_loss:
+        if  train_loss_epoch < model_config['best_train_loss']:
+            model_config['best_train_loss'] = train_loss_epoch
             utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = "best_train")
-            best_train_loss = train_loss_epoch
-            print(f"Best train Model: {best_train_loss:.03f}")
+            print(f"Best train Model: {model_config['best_train_loss']:.03f}")
             #DEBUG
             # debug_file.write('best_train_loss: ' + str(best_train_loss) + '\n')
             # debug_file.flush()
@@ -253,9 +248,10 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
         utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = 'checkpoint')
 
 
-    print('Best Loss: ', best_train_loss)
-    print('Best Val Loss: ', best_val_loss)
-    print('Best Chamfer Model:  ', best_chamfer_loss)
+    print('Best Loss: ', model_config['best_train_loss'])
+    print('Best Val Loss: ', model_config['best_val_loss'])
+    print('Best Chamfer:  ', model_config['best_chamfer_loss'])
+    print('Best Integral:  ', model_config['best_integral'])
 
 
 
@@ -266,31 +262,33 @@ if __name__ == "__main__":
 
     # Model name
     current_time = datetime.datetime.now().strftime("%b%d_%H-%M")
-    denoiser_name = "10_Objects_200epochs_32latent_enc64_dec128"
-    # denoiser_name = "TEST"
+    denoiser_name = "30_Objects_1000epochs_32latent_enc128_dec256"
     experiment_name = f"{current_time}_{denoiser_name}"
 
 
     config = {
         'experiment_name': experiment_name,
         'device': 'cuda:0',
-        'train_batch_size': 128,
+        'train_batch_size': 64,
         'val_batch_size': 128,
-        'resume_ckpt': None,
         'learning_rate': 0.0004,
         'step_size': 10, # scheduler step, one step is one batch
         'gamma': 1,
-        'max_epochs': 200,
+        'max_epochs': 1000,
         'timesteps': 1000,
         'print_every_n': 30, # every n batches
-        'validate_every_n_epochs': 2,
+        'validate_every_n_epochs': 20,
     }
 
     model_config = {
         'last_epoch': 0,
-        'enc_hidden_channels': 64,
-        'dec_hidden_dim': 128,
-        'latent_dim': 32
+        'enc_hidden_channels': 128,
+        'dec_hidden_dim': 256,
+        'latent_dim': 32,
+        'best_train_loss': 0.1,
+        'best_chamfer_loss': 0.1,
+        'best_val_loss': 0.1,
+        'best_integral':80
     }
 
     if torch.cuda.is_available() and config['device'].startswith('cuda'):
@@ -328,6 +326,12 @@ if __name__ == "__main__":
     torch.cuda.empty_cache()
     #tensorboard --logdir=logs
     
+    # #Reload model
+    # experiment_name = "Jun14_22-22_30_Objects_1000epochs_32latent_enc128_dec256"
+    # config, model_config, encoder, decoder = utils.reload_model(optimizer, scheduler, experiment_name, 'checkpoint', device)
+    # config['max_epochs'] = 800 - model_config['last_epoch']
+    # print(f"Checkpoint loaded! {config['max_epochs']} more epochs to go!")
+
     train_log_path = pathlib.Path(f"logs/{datetime.datetime.now().strftime('%b%d')}/{config['experiment_name']}/train")
     writer_train = SummaryWriter(train_log_path)
     val_log_path = pathlib.Path(f"logs/{datetime.datetime.now().strftime('%b%d')}/{config['experiment_name']}/val")

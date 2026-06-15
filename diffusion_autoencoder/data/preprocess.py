@@ -288,8 +288,8 @@ if __name__ == "__main__":
     
     parser.add_argument("--process-all", action="store_true")
 
-    parser.add_argument("--num-train", type=int, default=10)
-    parser.add_argument("--num-val", type=int, default=2)
+    parser.add_argument("--num-train", type=int, default=30)
+    parser.add_argument("--num-val", type=int, default=5)
     parser.add_argument("--num-test", type=int, default=2)
     
     parser.add_argument("--train-ratio", type=float, default=0.8)
