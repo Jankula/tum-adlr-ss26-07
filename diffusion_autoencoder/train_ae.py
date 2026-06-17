@@ -114,7 +114,7 @@ parser.add_argument('--logging', type=eval, default=True, choices=[True, False])
 parser.add_argument('--log_root', type=str, default='./logs_ae')
 parser.add_argument("--dry_run", default=False, type=bool, choices=[True, False])
 parser.add_argument("--patience", type=int, default=10)
-parser.add_argument("--num_epochs", type=int, default=3)
+parser.add_argument("--num_epochs", type=int, default=50)
 args = parser.parse_args()
 print("Arguments parsed")
 
@@ -245,8 +245,9 @@ def train(train_batch):
 
 @torch.no_grad
 def validate(val_batch):
+    val_batch.to(device)
     val_loss, _ = model.get_loss(val_batch)
-    return val_loss
+    return val_loss.item()
 
 
 # Train the model if dry_run == false
@@ -271,10 +272,16 @@ if args.dry_run == False:
             epoch_train_loss += train_loss
             epoch_kld_loss += kld_loss
         
+        epoch_train_loss /= len(train_dl)
+        epoch_kld_loss /= len(train_dl)
+        
         model.eval()
         
         for val_batch in val_dl:
-            epoch_val_loss += validate(val_batch)
+            val_loss = validate(val_batch)
+            epoch_val_loss += val_loss
+        
+        epoch_val_loss /= len(val_dl)
         
         model.train()
             
@@ -322,8 +329,12 @@ if args.dry_run == False:
         running_test_accuracy_latents += chamfer_latents.detach().cpu().numpy()
         running_test_accuracy_means += chamfer_means.detach().cpu().numpy()
     
+    running_test_accuracy_latents /= len(test_dl)
+    running_test_accuracy_means /= len(test_dl)
+    
     logger(f"\nTest Accuracy with latents: {running_test_accuracy_latents / len(test_dl):.3f}")
-    logger(f"Test Accuracy with means: {running_test_accuracy_means / len(test_dl):.3f}\n") 
+    logger(f"Test Accuracy with means: {running_test_accuracy_means / len(test_dl):.3f}\n")
+    print(f"Test Accuracy: {running_test_accuracy_means:.3f}") 
 
     torch.save(model.state_dict(), save_path + "/end_model.pt")
     logger("Saving model at end of training: " + save_path + "/end_model.pt")
