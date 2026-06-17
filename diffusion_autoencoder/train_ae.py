@@ -198,7 +198,7 @@ if args.resume:
     model = AutoEncoder(model_state_dict["args"]).to(device)
     model.load_state_dict(model_state_dict["state_dict"])
 else:
-    model = AutoEncoder(args.num_points, 3, args.hidden_dim, args.latent_dim, args.num_steps, args.beta_1, args.beta_T, args.kl_start)
+    model = AutoEncoder(args.num_points, 3, args.hidden_dim, args.latent_dim, args.num_steps, args.beta_1, args.beta_T, args.kl_start).to(device)
 
     print(f"\nBuilding new Model with num_points: {args.num_points}, hidden_dim: {args.hidden_dim}, latent_dim: {args.latent_dim} \
           \nnum_steps: {args.num_steps}, beta_1: {args.beta_1}, beta_T: {args.beta_T}, kl_start: {args.kl_start}, kl_end: {args.kl_end}")
@@ -224,11 +224,14 @@ scheduler = get_linear_scheduler(
 logger("Scheduler Parameters:\n" + f"Start Epoch: {args.sched_start_epoch}\n" \
        + f"End Epoch: {args.sched_end_epoch}\n" + f"Learning Rate: {args.lr}" + f"End Learning Rate: {args.end_lr}\n")
 
+print("Training on: ", next(model.parameters()).device)
+logger(f"Training on: {next(model.parameters()).device}")
+
 
 # Train and model updates
 def train(train_batch):
     # Load data
-    train_batch.to(device)
+    train_batch = train_batch.to(device)
     # Reset grad and model state
     optimizer.zero_grad()
 
@@ -245,7 +248,7 @@ def train(train_batch):
 
 @torch.no_grad
 def validate(val_batch):
-    val_batch.to(device)
+    val_batch = val_batch.to(device)
     val_loss, _ = model.get_loss(val_batch)
     return val_loss.item()
 
