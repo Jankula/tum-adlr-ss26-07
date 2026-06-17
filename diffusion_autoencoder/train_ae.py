@@ -114,7 +114,7 @@ parser.add_argument('--logging', type=eval, default=True, choices=[True, False])
 parser.add_argument('--log_root', type=str, default='./logs_ae')
 parser.add_argument("--dry_run", default=False, type=bool, choices=[True, False])
 parser.add_argument("--patience", type=int, default=10)
-parser.add_argument("--num_epochs", type=int, default=10)
+parser.add_argument("--num_epochs", type=int, default=20)
 args = parser.parse_args()
 print("Arguments parsed")
 
