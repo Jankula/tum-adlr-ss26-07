@@ -126,7 +126,7 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
             mse_loss_per_item = F.mse_loss(predicted_noise, actual_noise, reduction='none').mean(dim=[1, 2]) #[B]
             MSE_loss = mse_loss_per_item.mean()
 
-            loss = MSE_loss + min(0.01, 0.0001 * 1.2 ** epoch) * KLD_loss
+            loss = MSE_loss + 0.0001 * KLD_loss
 
 
             loss.backward()

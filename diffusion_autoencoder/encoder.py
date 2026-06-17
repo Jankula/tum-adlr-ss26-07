@@ -49,7 +49,7 @@ class PointNetEncoder(nn.Module):
 
         self.fc1_mean_norm = nn.LayerNorm(2 * hidden_channels)
         self.fc2_mean_norm = nn.LayerNorm(hidden_channels)
-        # self.fc3_mean_norm = nn.LayerNorm(latent_dim)
+        self.fc3_mean_norm = nn.LayerNorm(latent_dim)
 
         #For calculating the log-variance of the latent variable
         self.fc1_var = nn.Linear(4 * hidden_channels, 2 * hidden_channels)
@@ -58,7 +58,7 @@ class PointNetEncoder(nn.Module):
 
         self.fc1_var_norm = nn.LayerNorm(2 * hidden_channels)
         self.fc2_var_norm = nn.LayerNorm(hidden_channels)
-        # self.fc3_var_norm = nn.LayerNorm(latent_dim)
+        self.fc3_var_norm = nn.LayerNorm(latent_dim)
 
     def forward(self, x):
         x = x.transpose(1, 2) # Transform from [B, N, C] to [B, C, N]
@@ -71,13 +71,13 @@ class PointNetEncoder(nn.Module):
         #Reparametrization trick, to enable backpropagation training of the VAE
         #Model learns mean and log_variance of the Gaussian latent space distribution
         #Sampling of latents handled via outside function with learned mean and log_variance
-        mean = F.silu(self.fc1_mean_norm(self.fc1_mean(x)))
-        mean = F.silu(self.fc2_mean_norm(self.fc2_mean(mean)))
-        mean = self.fc3_mean(mean)
+        mean = F.relu(self.fc1_mean_norm(self.fc1_mean(x)))
+        mean = F.relu(self.fc2_mean_norm(self.fc2_mean(mean)))
+        mean = self.fc3_mean_norm(self.fc3_mean(mean))
 
-        log_variance = F.silu(self.fc1_var_norm(self.fc1_var(x)))
-        log_variance = F.silu(self.fc2_var_norm(self.fc2_var(log_variance)))
-        log_variance = self.fc3_var(log_variance)
+        log_variance = F.relu(self.fc1_var_norm(self.fc1_var(x)))
+        log_variance = F.relu(self.fc2_var_norm(self.fc2_var(log_variance)))
+        log_variance = self.fc3_var_norm(self.fc3_var(log_variance))
 
         if self.clamp:
             log_variance = torch.clamp(log_variance, min=-30.0, max=20.0) # For numerical stability

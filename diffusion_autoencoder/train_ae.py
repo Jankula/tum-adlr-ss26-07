@@ -96,25 +96,25 @@ parser.add_argument("--kl_start", type=float, default=1e-4)
 parser.add_argument("--kl_end", type=float, default=0.01)
 
 # Datasets and loaders
-parser.add_argument('--dataset_path', type=str, default="../../../GraspDataset/data/preprocessed/preprocessing5")
-parser.add_argument('--train_batch_size', type=int, default=128)
-parser.add_argument('--val_batch_size', type=int, default=32)
+parser.add_argument('--dataset_path', type=str, default="../data/preprocessed/preprocessing5")
+parser.add_argument('--train_batch_size', type=int, default=3)
+parser.add_argument('--val_batch_size', type=int, default=3)
 
 # Optimizer and scheduler
 parser.add_argument('--lr', type=float, default=1e-3)
 parser.add_argument('--weight_decay', type=float, default=0)
 parser.add_argument('--max_grad_norm', type=float, default=10)
 parser.add_argument('--end_lr', type=float, default=1e-4)
-parser.add_argument('--sched_start_epoch', type=int, default=2000)
-parser.add_argument('--sched_end_epoch', type=int, default=5000)
+parser.add_argument('--sched_start_epoch', type=int, default=5)
+parser.add_argument('--sched_end_epoch', type=int, default=10)
 
 # Training
 parser.add_argument('--seed', type=int, default=42)
 parser.add_argument('--logging', type=eval, default=True, choices=[True, False])
 parser.add_argument('--log_root', type=str, default='./logs_ae')
 parser.add_argument("--dry_run", default=False, type=bool, choices=[True, False])
-parser.add_argument("--patience", type=int, default=100)
-parser.add_argument("--num_epochs", type=int, default=5000)
+parser.add_argument("--patience", type=int, default=10)
+parser.add_argument("--num_epochs", type=int, default=3)
 args = parser.parse_args()
 print("Arguments parsed")
 
@@ -224,25 +224,31 @@ scheduler = get_linear_scheduler(
 logger("Scheduler Parameters:\n" + f"Start Epoch: {args.sched_start_epoch}\n" \
        + f"End Epoch: {args.sched_end_epoch}\n" + f"Learning Rate: {args.lr}" + f"End Learning Rate: {args.end_lr}\n")
 
-# Train, validate 
-def train(train_batch, val_batch):
+
+# Train and model updates
+def train(train_batch):
     # Load data
     train_batch.to(device)
-    val_batch.to(device)
     # Reset grad and model state
     optimizer.zero_grad()
 
     # Forward
     loss, kld_loss = model.get_loss(train_batch)
-    val_loss, _ = model.get_loss(val_batch)
 
     # Backward and optimize
     loss.backward()
     orig_grad_norm = clip_grad_norm_(model.parameters(), args.max_grad_norm)
     optimizer.step()
 
-    return loss.item(), val_loss.item(), kld_loss.item(), orig_grad_norm
-    
+    return loss.item(), kld_loss.item(), orig_grad_norm
+
+
+@torch.no_grad
+def validate(val_batch):
+    val_loss, _ = model.get_loss(val_batch)
+    return val_loss
+
+
 # Train the model if dry_run == false
 if args.dry_run == False:
     patience = 0
@@ -260,13 +266,18 @@ if args.dry_run == False:
         kl_annealing(model, i+1, args.num_epochs, args.kl_start, args.kl_end)
 
         for it, train_batch in enumerate(train_dl):
-            val_batch = next(iter(val_dl))
-            train_loss, val_loss, kld_loss, orig_grad_norm = train(train_batch, val_batch)
+            train_loss, kld_loss, orig_grad_norm = train(train_batch)
 
             epoch_train_loss += train_loss
-            epoch_val_loss += val_loss
             epoch_kld_loss += kld_loss
         
+        model.eval()
+        
+        for val_batch in val_dl:
+            epoch_val_loss += validate(val_batch)
+        
+        model.train()
+            
         if epoch_val_loss > previous_val_loss:
             patience += 1
         if patience >= args.patience:
@@ -290,7 +301,7 @@ if args.dry_run == False:
         val_loss_history.append(epoch_val_loss)
         kld_loss_history.append(epoch_kld_loss)
 
-        if (i+1) % 500 == 0:
+        if (i+1) % 1 == 0:
             print(f"Epoch: {i+1}\tTraining Loss: {epoch_train_loss:.3f}\tVal Loss: {epoch_val_loss:.3f}\tKLD Loss: {epoch_kld_loss:.3f}")
             logger(f"Epoch: {i+1}\tTraining Loss: {epoch_train_loss:.3f}\tVal Loss: {epoch_val_loss:.3f}\tKLD Loss: {epoch_kld_loss:.3f}")
 
