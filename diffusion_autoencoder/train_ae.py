@@ -82,14 +82,14 @@ def kl_annealing(model:AutoEncoder, current_epoch, num_epochs, kl_start, kl_end)
 parser = argparse.ArgumentParser()
 
 # model arguments
-parser.add_argument('--latent_dim', type=int, default=256)
+parser.add_argument('--latent_dim', type=int, default=128)
 parser.add_argument('--num_steps', type=int, default=200)
 parser.add_argument('--beta_1', type=float, default=1e-4)
 parser.add_argument('--beta_T', type=float, default=0.05)
 parser.add_argument('--sched_mode', type=str, default='linear')
 parser.add_argument('--flexibility', type=float, default=0.0)
 parser.add_argument('--resume', type=str, default=None)
-parser.add_argument("--num_points", type=int, default=256)
+parser.add_argument("--num_points", type=int, default=512)
 parser.add_argument("--hidden_dim", type=int, default=128)
 parser.add_argument("--save_path", type=str, default="./models")
 parser.add_argument("--kl_start", type=float, default=1e-4)
@@ -114,7 +114,7 @@ parser.add_argument('--logging', type=eval, default=True, choices=[True, False])
 parser.add_argument('--log_root', type=str, default='./logs_ae')
 parser.add_argument("--dry_run", default=False, type=bool, choices=[True, False])
 parser.add_argument("--patience", type=int, default=10)
-parser.add_argument("--num_epochs", type=int, default=50)
+parser.add_argument("--num_epochs", type=int, default=10)
 args = parser.parse_args()
 print("Arguments parsed")
 
@@ -187,7 +187,7 @@ logger("Dataset Sizes after splitting:\n" + f"Training Size {len(train_dataset)}
 
 train_dl = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
 val_dl = DataLoader(val_dataset, batch_size=args.val_batch_size, drop_last=True)
-test_dl = DataLoader(test_dataset, batch_size=args.train_batch_size)
+test_dl = DataLoader(test_dataset, batch_size=args.train_batch_size, drop_last=True)
 
 print(f"\nTraining_DL Size {len(train_dl)}\t|\t Val_DL Size {len(val_dl)}\t|\tTest_DL Size {len(test_dl)}")
 logger("Dataloader Sizes after Splitting:" + f"\nTraining_DL Size {len(train_dl)}\t|\t Val_DL Size {len(val_dl)}\t|\tTest_DL Size {len(test_dl)}\n")
@@ -320,6 +320,7 @@ if args.dry_run == False:
     running_test_accuracy_means = 0
     model.eval()
     for batch in test_dl:
+        batch = batch.to(device)
         latents, mean, _ = model.encode(batch)
         pred_pc_latents = model.decode(latents, args.num_points)
         pred_pc_means = model.decode(mean, args.num_points)
