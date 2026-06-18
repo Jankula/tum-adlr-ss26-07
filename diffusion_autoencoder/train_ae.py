@@ -97,6 +97,7 @@ parser.add_argument("--kl_end", type=float, default=0.01)
 
 # Datasets and loaders
 parser.add_argument('--dataset_path', type=str, default="../data/preprocessed/preprocessing5")
+parser.add_argument('--test_path', type=str, default="../data/preprocessed/test")
 parser.add_argument('--train_batch_size', type=int, default=3)
 parser.add_argument('--val_batch_size', type=int, default=3)
 
@@ -114,7 +115,7 @@ parser.add_argument('--logging', type=eval, default=True, choices=[True, False])
 parser.add_argument('--log_root', type=str, default='./logs_ae')
 parser.add_argument("--dry_run", default=False, type=bool, choices=[True, False])
 parser.add_argument("--patience", type=int, default=10)
-parser.add_argument("--num_epochs", type=int, default=20)
+parser.add_argument("--num_epochs", type=int, default=10)
 args = parser.parse_args()
 print("Arguments parsed")
 
@@ -166,19 +167,19 @@ if args.logging:
 
 # Dataset and Dataloader
 point_cloud_files = get_point_cloud_files(args.dataset_path)
+test_files = get_point_cloud_files(args.test_path)
 dataset_size = len(point_cloud_files)
 logger("Size of the whole Training Dataset: " + str(dataset_size) + '\n')
 # Train, Val, Test split hardcoded at the moment
 train_val_test_split = {
-    "train_size": int(dataset_size * 0.8),
+    "train_size": int(dataset_size * 0.9),
     "val_size": int(dataset_size * 0.1),
-    "test_size": int(dataset_size - (int(dataset_size * 0.8) + int(dataset_size * 0.1)))
 }
 
 train_dataset = PointCloudDataset(point_cloud_files[:train_val_test_split["train_size"]], number_points=args.num_points)
-val_dataset = PointCloudDataset(point_cloud_files[train_val_test_split["train_size"]:(train_val_test_split["val_size"] + train_val_test_split["train_size"])],
+val_dataset = PointCloudDataset(point_cloud_files[train_val_test_split["train_size"]:],
                                 number_points=args.num_points)
-test_dataset = PointCloudDataset(point_cloud_files[-train_val_test_split["test_size"]:], number_points=args.num_points)
+test_dataset = PointCloudDataset(test_files, number_points=args.num_points)
 
 
 print(f"Dataset Size: {dataset_size}")
@@ -187,7 +188,7 @@ logger("Dataset Sizes after splitting:\n" + f"Training Size {len(train_dataset)}
 
 train_dl = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
 val_dl = DataLoader(val_dataset, batch_size=args.val_batch_size, drop_last=True)
-test_dl = DataLoader(test_dataset, batch_size=args.train_batch_size, drop_last=True)
+test_dl = DataLoader(test_dataset, batch_size=50, drop_last=True)
 
 print(f"\nTraining_DL Size {len(train_dl)}\t|\t Val_DL Size {len(val_dl)}\t|\tTest_DL Size {len(test_dl)}")
 logger("Dataloader Sizes after Splitting:" + f"\nTraining_DL Size {len(train_dl)}\t|\t Val_DL Size {len(val_dl)}\t|\tTest_DL Size {len(test_dl)}\n")
@@ -319,8 +320,10 @@ if args.dry_run == False:
     running_test_accuracy_latents = 0
     running_test_accuracy_means = 0
     model.eval()
+    print("Start Testing")
+    logger("Start Testing\n")
     for batch in test_dl:
-        batch = batch.to(device)
+        model = model.cpu()
         latents, mean, _ = model.encode(batch)
         pred_pc_latents = model.decode(latents, args.num_points)
         pred_pc_means = model.decode(mean, args.num_points)
