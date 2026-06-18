@@ -32,12 +32,14 @@ class PointNetEncoder(nn.Module):
         #Shared MLP idea from Pointnet with Conv1d, does not weight order of points in pointcloud
         self.projection = nn.Sequential(
             nn.Conv1d(in_channels, hidden_channels, 1), #Conv1d expects [B, C, N]
-            nn.GroupNorm(8, hidden_channels), #GroupNorm for small batch_size training, Batchnorm weak to noisy batch statistics
+            nn.BatchNorm1d(hidden_channels), 
+            nn.ReLU(),
+            nn.Conv1d(hidden_channels, hidden_channels, 1),
+            nn.BatchNorm1d(hidden_channels),
             nn.ReLU(),
             nn.Conv1d(hidden_channels, 2 * hidden_channels, 1),
-            nn.GroupNorm(8, 2 * hidden_channels),
-            nn.ReLU(),
-            nn.Conv1d(2 * hidden_channels, 4 * hidden_channels, 1),
+            nn.BatchNorm1d(2 * hidden_channels),
+            nn.Conv1d(2 * hidden_channels, 4 * hidden_channels, 1)
         )
 
         self.max_pool = nn.MaxPool1d(kernel_size=number_points)
@@ -47,18 +49,18 @@ class PointNetEncoder(nn.Module):
         self.fc2_mean = nn.Linear(2 * hidden_channels, hidden_channels)
         self.fc3_mean = nn.Linear(hidden_channels, latent_dim)
 
-        self.fc1_mean_norm = nn.LayerNorm(2 * hidden_channels)
-        self.fc2_mean_norm = nn.LayerNorm(hidden_channels)
-        self.fc3_mean_norm = nn.LayerNorm(latent_dim)
+        self.fc1_mean_norm = nn.BatchNorm1d(2 * hidden_channels)
+        self.fc2_mean_norm = nn.BatchNorm1d(hidden_channels)
+        self.fc3_mean_norm = nn.BatchNorm1d(latent_dim)
 
         #For calculating the log-variance of the latent variable
         self.fc1_var = nn.Linear(4 * hidden_channels, 2 * hidden_channels)
         self.fc2_var = nn.Linear(2 * hidden_channels, hidden_channels)
         self.fc3_var = nn.Linear(hidden_channels, latent_dim)
 
-        self.fc1_var_norm = nn.LayerNorm(2 * hidden_channels)
-        self.fc2_var_norm = nn.LayerNorm(hidden_channels)
-        self.fc3_var_norm = nn.LayerNorm(latent_dim)
+        self.fc1_var_norm = nn.BatchNorm1d(2 * hidden_channels)
+        self.fc2_var_norm = nn.BatchNorm1d(hidden_channels)
+        self.fc3_var_norm = nn.BatchNorm1d(latent_dim)
 
     def forward(self, x):
         x = x.transpose(1, 2) # Transform from [B, N, C] to [B, C, N]
@@ -122,3 +124,5 @@ class PointnetVAE(nn.Module):
         mean, log_variance = self.encoder(x)
         z = self.sample_latent_z(mean, log_variance)
         return self.decoder(z), mean, log_variance # Reconstructed Point Cloud + mean and log_variance for KLD loss
+    
+    

@@ -186,7 +186,7 @@ print(f"Dataset Size: {dataset_size}")
 print(f"Training Size {len(train_dataset)}\t|\t Val Size {len(val_dataset)}\t|\tTest Size {len(test_dataset)}")
 logger("Dataset Sizes after splitting:\n" + f"Training Size {len(train_dataset)}\t|\t Val Size {len(val_dataset)}\t|\tTest Size {len(test_dataset)}\n")
 
-train_dl = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
+train_dl = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True, drop_last=True)
 val_dl = DataLoader(val_dataset, batch_size=args.val_batch_size, drop_last=True)
 test_dl = DataLoader(test_dataset, batch_size=50, drop_last=True)
 
