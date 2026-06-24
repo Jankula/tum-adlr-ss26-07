@@ -198,6 +198,7 @@ def build_dataset(args):
     output_dir = pathlib.Path(args.output_dir)
     manifold_bin = str(pathlib.Path(args.manifold_dir) / "manifold")
     simplify_bin = str(pathlib.Path(args.manifold_dir) / "simplify")
+    seed = args.seed
 
     # 1. Setup Directories
     train_dir = output_dir / "train"
@@ -221,7 +222,8 @@ def build_dataset(args):
         for object_dir in [p for p in category_dir.iterdir() if p.is_dir()]:
             for scale_dir in [p for p in object_dir.iterdir() if p.is_dir()]:
                 object_dirs.append(scale_dir)
-                
+
+    random.seed(seed)            
     random.shuffle(object_dirs)
     n_total = len(object_dirs)
     
@@ -283,20 +285,22 @@ if __name__ == "__main__":
     parser.add_argument("--manifold-dir", type=str, default="/home/nikola/Manifold/build")
     
     # Normalization Argument
-    parser.add_argument("--normalize", type=str, choices=["none", "max_norm", "global_var", "coord_var"], default="max_norm",
+    parser.add_argument("--normalize", type=str, choices=["none", "max_norm", "global_var", "coord_var"], default="global_var",
                         help="Choose which normalization to apply to the final point clouds.")
+    
+    parser.add_argument("--seed", type=int, default=1)
     
     parser.add_argument("--process-all", action="store_true")
 
-    parser.add_argument("--num-train", type=int, default=30)
-    parser.add_argument("--num-val", type=int, default=5)
-    parser.add_argument("--num-test", type=int, default=2)
+    parser.add_argument("--num-train", type=int, default=1000)
+    parser.add_argument("--num-val", type=int, default=50)
+    parser.add_argument("--num-test", type=int, default=50)
     
-    parser.add_argument("--train-ratio", type=float, default=0.8)
-    parser.add_argument("--val-ratio", type=float, default=0.1)
-    parser.add_argument("--test-ratio", type=float, default=0.1)
+    parser.add_argument("--train-ratio", type=float, default=0.97)
+    parser.add_argument("--val-ratio", type=float, default=0.015)
+    parser.add_argument("--test-ratio", type=float, default=0.015)
     
-    parser.add_argument("--num-grasps-per-object", type=int, default=1)
+    parser.add_argument("--num-grasps-per-object", type=int, default=3)
     parser.add_argument("--num-sample-points", type=int, default=2048)
     parser.add_argument("--max-num-vertices", type=int, default=2048)
     

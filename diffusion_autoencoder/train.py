@@ -11,6 +11,7 @@ from torch.utils.tensorboard.writer import SummaryWriter
 from scipy.integrate import trapezoid
 from metrics import chamfer_distance
 import trimesh
+import random
 
 import utils, dataset
 from encoder import Encoder
@@ -118,15 +119,15 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
         timestep_counts.clear()
 
         # Weight plotting
-        for name, weight in encoder.named_parameters():
-            writer_train.add_histogram(f"Weights/{name}", weight, epoch)
-            if weight.grad is not None:
-              writer_train.add_histogram(f"Gradients/{name}", weight.grad, epoch)
+        # for name, weight in encoder.named_parameters():
+        #     writer_train.add_histogram(f"Weights/{name}", weight, epoch)
+        #     if weight.grad is not None:
+        #       writer_train.add_histogram(f"Gradients/{name}", weight.grad, epoch)
         # Weight plotting
-        for name, weight in decoder.named_parameters():
-            writer_train.add_histogram(f"Weights/{name}", weight, epoch)
-            if weight.grad is not None:
-              writer_train.add_histogram(f"Gradients/{name}", weight.grad, epoch)
+        # for name, weight in decoder.named_parameters():
+        #     writer_train.add_histogram(f"Weights/{name}", weight, epoch)
+        #     if weight.grad is not None:
+        #       writer_train.add_histogram(f"Gradients/{name}", weight.grad, epoch)
 
         # VALIDATION
         #___________________________________________________________________________________________________
@@ -204,7 +205,7 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
             if avg_chamfer_dist < model_config['best_chamfer_loss']:
                 model_config['best_chamfer_loss'] = avg_chamfer_dist
                 utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = 'best_chamfer')
-                print(f"Best Chamfer Model:  {model_config['best_chamfer_loss']:.05f}")
+                # print(f"Best Chamfer Model:  {model_config['best_chamfer_loss']:.05f}")
 
             # Chamfer
             #___________________________________________________________________________________________________________________
@@ -213,7 +214,7 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
             if loss_val < model_config['best_val_loss']:
                 model_config['best_val_loss'] = loss_val
                 utils.save_model(encoder, decoder, optimizer, scheduler, config, model_config, type = 'best_val')
-                print(f"Best val Model:  {model_config['best_val_loss']:.05f}")
+                # print(f"Best val Model:  {model_config['best_val_loss']:.05f}")
 
             encoder.train()
             decoder.train()
@@ -221,6 +222,31 @@ def train(encoder, decoder, trainloader, valloader, device, optimizer, scheduler
             # Clear dictionaries so the next epoch tracks completely fresh averages
             val_timestep_loss_sum.clear()
             val_timestep_counts.clear()
+
+            # TRAIN CHAMFER
+            #_____________________________________________________________________________________________________________
+
+            number_of_points = 2048
+            DDIM_steps = 50
+            trainset = trainloader.dataset
+            avg_chamfer = 0.
+            num_of_train_obj = 20
+            with torch.no_grad():
+                for object_index in random.sample(range(0, trainset.real_length - 1), num_of_train_obj):
+                    pc = trainset[object_index]['point_cloud'].to(device).unsqueeze(0)
+                    mean, log_variance = encoder(pc) # valset not in this function
+                    code = encoder.sample_latent_z(mean, log_variance)
+
+                    generated_pc_ddim = sample_ddim(decoder, code, n_points=number_of_points, steps=DDIM_steps, timesteps=config['timesteps'])
+                    
+                    dist = chamfer_distance(pc, generated_pc_ddim).item()
+                    avg_chamfer += dist
+                    # print(f"Chamfer distance, Object{object_index}: {dist}")
+            avg_chamfer_dist = avg_chamfer / (num_of_train_obj)
+            writer_train.add_scalar("Average Chamfer Distance", avg_chamfer_dist, epoch)
+
+            # TRAIN CHAMFER
+            #_____________________________________________________________________________________________________________
         
         # VALIDATION
         #___________________________________________________________________________________________________
@@ -262,7 +288,7 @@ if __name__ == "__main__":
 
     # Model name
     current_time = datetime.datetime.now().strftime("%b%d_%H-%M")
-    denoiser_name = "30_Objects_1000epochs_32latent_enc128_dec256"
+    denoiser_name = "7000epochs_128latent_enc128_dec512_globalnorm"
     experiment_name = f"{current_time}_{denoiser_name}"
 
 
@@ -274,21 +300,21 @@ if __name__ == "__main__":
         'learning_rate': 0.0004,
         'step_size': 10, # scheduler step, one step is one batch
         'gamma': 1,
-        'max_epochs': 1000,
+        'max_epochs': 7000,
         'timesteps': 1000,
         'print_every_n': 30, # every n batches
-        'validate_every_n_epochs': 20,
+        'validate_every_n_epochs': 15,
     }
 
     model_config = {
         'last_epoch': 0,
         'enc_hidden_channels': 128,
-        'dec_hidden_dim': 256,
-        'latent_dim': 32,
-        'best_train_loss': 0.1,
-        'best_chamfer_loss': 0.1,
-        'best_val_loss': 0.1,
-        'best_integral':80
+        'dec_hidden_dim': 512,
+        'latent_dim': 128,
+        'best_train_loss': 100,
+        'best_chamfer_loss': 100,
+        'best_val_loss': 100,
+        'best_integral':1000
     }
 
     if torch.cuda.is_available() and config['device'].startswith('cuda'):
@@ -299,6 +325,7 @@ if __name__ == "__main__":
         print('Using CPU')
 
     num_workers = max(1, os.cpu_count() - 1)
+    print(num_workers)
     trainset = dataset.Dataset_new('train', config['timesteps'])
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=config['train_batch_size'], shuffle=True, num_workers=num_workers, pin_memory=True)
     valset = dataset.Dataset_new('val', config['timesteps'])
@@ -327,10 +354,12 @@ if __name__ == "__main__":
     #tensorboard --logdir=logs
     
     # #Reload model
-    # experiment_name = "Jun14_22-22_30_Objects_1000epochs_32latent_enc128_dec256"
+    # experiment_name = "Jun16_17-40_100_Objects_1000epochs_64latent_enc128_dec256_globalnorm"
     # config, model_config, encoder, decoder = utils.reload_model(optimizer, scheduler, experiment_name, 'checkpoint', device)
-    # config['max_epochs'] = 800 - model_config['last_epoch']
+    # config['max_epochs'] = 2000 - model_config['last_epoch']
     # print(f"Checkpoint loaded! {config['max_epochs']} more epochs to go!")
+    # experiment_name = "Jun16_17-40_100_Objects_2000epochs_64latent_enc128_dec256_globalnorm"
+    # config['experiment_name'] = experiment_name
 
     train_log_path = pathlib.Path(f"logs/{datetime.datetime.now().strftime('%b%d')}/{config['experiment_name']}/train")
     writer_train = SummaryWriter(train_log_path)

@@ -1,4 +1,5 @@
 import os
+from sympy import false
 import torch
 import numpy as np
 import pathlib
@@ -20,7 +21,7 @@ def save_model(encoder, decoder, optimizer, scheduler, config, model_config, typ
     torch.save(checkpoint, pathlib.Path(f'models/{config["experiment_name"]}/{type}.pt'))
 
 def reload_model(optimizer, scheduler, experiment_name, type, device):
-    checkpoint = torch.load(pathlib.Path(f'models/{experiment_name}/{type}.pt'), weights_only=True, map_location=device)
+    checkpoint = torch.load(pathlib.Path(f'models/{experiment_name}/{type}.pt'), weights_only=False, map_location=device)
 
     config = checkpoint['config']
     
