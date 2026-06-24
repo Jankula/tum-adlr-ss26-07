@@ -68,7 +68,7 @@ def get_point_cloud_files(root:Path):
     if not isinstance(root, Path):
         root = Path(root)
     if not root.exists:
-        print("Paath does not exist")
+        print("Path does not exist")
         return []
     point_cloud_files = sorted(root.rglob("pointcloud*.obj"))
     return point_cloud_files

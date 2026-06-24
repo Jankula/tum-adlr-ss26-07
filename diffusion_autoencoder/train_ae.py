@@ -1,7 +1,7 @@
 import os
 import argparse
 import torch
-from pytorch3d.loss import chamfer_distance
+#from pytorch3d.loss import chamfer_distance
 import numpy as np
 np.bool8 = np.bool
 np.string_ = np.bytes_
@@ -78,6 +78,18 @@ def check_path(path:str):
 def kl_annealing(model:AutoEncoder, current_epoch, num_epochs, kl_start, kl_end):
     fraction = (kl_end - kl_start) / num_epochs
     model.kl_state = kl_start + current_epoch * fraction
+
+def chamfer_custom(pc_a, pc_b):
+    # pc_a: [B, N, 3]
+    # pc_b: [B, M, 3]
+
+    dists = torch.cdist(pc_a, pc_b, p=2) ** 2
+    # shape: [B, N, M]
+
+    pc_a_to_pc_b = dists.min(dim=2).values  # [B, N]
+    pc_b_to_pc_a = dists.min(dim=1).values  # [B, M]
+
+    return pc_a_to_pc_b.mean() + pc_b_to_pc_a.mean()
 
 parser = argparse.ArgumentParser()
 
@@ -257,12 +269,15 @@ def validate(val_batch):
 # Train the model if dry_run == false
 if args.dry_run == False:
     patience = 0
+    previous_chamfer_loss = 1e6
     previous_val_loss = 1e6
     print(f"Starting training with {args.num_epochs} epochs")
     logger(f"Starting training with {args.num_epochs} epochs\n")
     train_loss_history = []
     val_loss_history = []
     kld_loss_history = []
+    chamfer_loss_history = []
+    epoch = []
 
     for i in range(args.num_epochs):
         epoch_train_loss = 0
@@ -287,20 +302,39 @@ if args.dry_run == False:
         
         epoch_val_loss /= len(val_dl)
         
-        model.train()
-            
         if epoch_val_loss > previous_val_loss:
             patience += 1
+        
         if patience >= args.patience:
             scheduler.step()
             logger(f"Reducing Learning Rate at Epoch: {i+1}\n" + f"New Learning Rate: {optimizer.param_groups[0]['lr']:.5f}\n")
             patience = 0
+            
+        model.train()
+        
+        if(i+1) % 50 == 0:
+            
+            model.eval()
+            
+            chamfer_loss = 0
+            
+            for batch in val_dl:
+                _, means, _ = model.encode(batch)
+                pred_pcs = model.decode(means, args.num_points)
+                chamfer_loss += chamfer_custom(pred_pcs, batch)
+            
+            if bool(chamfer_loss.shape):
+                chamfer_loss = chamfer_loss.mean()
 
-        if epoch_val_loss < previous_val_loss:
-            logger(f"Saving new best model at Epoch: {i+1}\n" + f"Val loss of the best model: {epoch_val_loss:.3f}\n")
-            torch.save(model.state_dict(), save_path + "/best_model.pt")
+            if chamfer_loss < previous_chamfer_loss:
+                logger(f"Saving new best model at Epoch: {i+1}\n" + f"Chamfer loss of the best model: {chamfer_loss:.3f}\n")
+                torch.save(model.state_dict(), save_path + "/best_model.pt")
 
-        previous_val_loss = epoch_val_loss
+            chamfer_loss_history.append(chamfer_loss)
+            epoch.append((i+1))
+            previous_chamfer_loss = chamfer_loss
+            
+            model.train()
 
 
         writer.add_scalar('train/loss', epoch_train_loss, i)
@@ -317,29 +351,21 @@ if args.dry_run == False:
             logger(f"Epoch: {i+1}\tTraining Loss: {epoch_train_loss:.3f}\tVal Loss: {epoch_val_loss:.3f}\tKLD Loss: {epoch_kld_loss:.3f}")
 
     # calculating the accuracy of the model with the test dataset
-    running_test_accuracy_latents = 0
     running_test_accuracy_means = 0
     model.eval()
     print("Start Testing")
     logger("Start Testing\n")
     for batch in test_dl:
-        model = model.cpu()
         latents, mean, _ = model.encode(batch)
-        pred_pc_latents = model.decode(latents, args.num_points)
         pred_pc_means = model.decode(mean, args.num_points)
-        chamfer_latents, _ = chamfer_distance(batch, pred_pc_latents)
-        chamfer_means, _ = chamfer_distance(batch, pred_pc_means)
-        if bool(chamfer_latents.shape):
-            chamfer_latents = chamfer_latents.mean(dim=0)
+        chamfer_means = chamfer_custom(batch, pred_pc_means)
+        if bool(chamfer_means.shape):
             chamfer_means = chamfer_means.mean(dim=0)
         
-        running_test_accuracy_latents += chamfer_latents.detach().cpu().numpy()
         running_test_accuracy_means += chamfer_means.detach().cpu().numpy()
     
-    running_test_accuracy_latents /= len(test_dl)
     running_test_accuracy_means /= len(test_dl)
     
-    logger(f"\nTest Accuracy with latents: {running_test_accuracy_latents / len(test_dl):.3f}")
     logger(f"Test Accuracy with means: {running_test_accuracy_means / len(test_dl):.3f}\n")
     print(f"Test Accuracy: {running_test_accuracy_means:.3f}") 
 
@@ -350,12 +376,19 @@ if args.dry_run == False:
     logger("Saving Plot: " + save_path + "/loss_history.png")
     logger.write_log_file(save_path)
     fig = plt.figure(figsize=(15, 10))
-    ax = fig.add_subplot(1, 1, 1)
-    ax.plot(train_loss_history, color="b", label="Train Loss")
-    ax.plot(val_loss_history, color="r", label="Val Loss")
-    ax.plot(kld_loss_history, color="m", label="KLD Loss")
+    plt.plot(train_loss_history, color="b", label="Train Loss")
+    plt.plot(val_loss_history, color="r", label="Val Loss")
     plt.legend()
     fig.savefig(save_path + "/loss_history.png")
+    fig = plt.figure(figsize=(15,10))
+    plt.plot(kld_loss_history, color="m", label="KLD Loss")
+    plt.legend()
+    fig.savefig(save_path + "/kld_loss.png")
+    
+    fig = plt.figure(figsize=(15, 10))
+    plt.plot(epoch, chamfer_loss_history, color="g", label="Chamfer Loss")
+    plt.legend()
+    fig.savefig(save_path + "/chamfer_loss.png")
     plt.show()
  
 
