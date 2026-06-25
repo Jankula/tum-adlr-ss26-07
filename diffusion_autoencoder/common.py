@@ -3,21 +3,48 @@ import torch.nn.functional as F
 import torch
 
 
+# class SineCosineEncoding(nn.Module):
+#     """Encodes the integer timestep 't' into a vector."""
+#     def __init__(self, dim):
+#         super().__init__()
+#         self.dim = dim
+
+#     def forward(self, t):
+#         device = t.device
+#         half_dim = self.dim // 2
+#         emb = torch.exp(torch.arange(half_dim, device=device) * -(torch.log(torch.tensor(10000.0)) / (half_dim - 1)))
+#         emb = t[:, None] * emb[None, :]
+#         emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
+#         return emb
+
 class SineCosineEncoding(nn.Module):
-    """Encodes the integer timestep 't' into a vector."""
+    """Encodes a tensor of values into sine/cosine embeddings."""
     def __init__(self, dim):
         super().__init__()
+        # Dimension must be even for an equal split of sin and cos
+        assert dim % 2 == 0, "Embedding dimension must be even."
         self.dim = dim
 
     def forward(self, t):
-        # t = t.float().view(-1, 1)
         device = t.device
         half_dim = self.dim // 2
-        emb = torch.exp(torch.arange(half_dim, device=device) * -(torch.log(torch.tensor(10000.0)) / (half_dim - 1)))
-        # emb = t * emb[None, :]
-        emb = t[:, None] * emb[None, :]
-        emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
-        return emb
+        
+        # Compute the frequency bands
+        # Shape: (half_dim,)
+        inv_freq = torch.exp(
+            torch.arange(half_dim, device=device).float() * -(torch.log(torch.tensor(10000.0)) / (half_dim - 1))
+        )
+        
+        # Reshape t and inv_freq to broadcast nicely together.
+        # Adding an extra dimension at the very end of 't' allows it to 
+        # multiply smoothly with 'inv_freq', no matter if 't' is 1D, 2D, etc.
+        # t[..., None] shape: (*, 1) | inv_freq[None, :] shape: (1, half_dim)
+        # Resulting shape: (*, half_dim)
+        emb = t[..., None] * inv_freq[None, :]
+        
+        # Cat sine and cosine components along the last dimension
+        # Resulting shape: (*, dim)
+        return torch.cat((emb.sin(), emb.cos()), dim=-1)
 
 class ConcatSquashLinear(nn.Module):
     def __init__(self, dim_in, dim_out, dim_ctx):
