@@ -220,7 +220,7 @@ if __name__ == "__main__":
 
     # Model name
     current_time = datetime.datetime.now().strftime("%b%d_%H-%M")
-    denoiser_name = "7000epochs_128latent_enc128_dec512_globalnorm"
+    denoiser_name = "epochs=1000_latent_dim=128_hidden_dim=128_embedding_dim=120"
     experiment_name = f"{current_time}_{denoiser_name}"
 
 
@@ -232,7 +232,7 @@ if __name__ == "__main__":
         'learning_rate': 0.0004,
         'step_size': 10, # scheduler step, one step is one batch
         'gamma': 1,
-        'max_epochs': 7000,
+        'max_epochs': 1000,
         'timesteps': 1000,
         'print_every_n': 30, # every n batches
         'validate_every_n_epochs': 15,
@@ -240,9 +240,9 @@ if __name__ == "__main__":
 
     model_config = {
         'last_epoch': 0,
-        'enc_hidden_channels': 128,
-        'dec_hidden_dim': 512,
         'latent_dim': 128,
+        'hidden_dim': 128,
+        'embedding_dim': 120,
         'best_train_loss': 100,
         'best_chamfer_loss': 100,
         'best_val_loss': 100,
@@ -258,14 +258,13 @@ if __name__ == "__main__":
 
     num_workers = max(1, os.cpu_count() - 1)
     print(num_workers)
-    trainset = dataset.Dataset_new('train', config['timesteps'])
+    trainset = dataset.Dataset_Latent_grasp_and_code('train', config['timesteps'], fake=True)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=config['train_batch_size'], shuffle=True, num_workers=num_workers, pin_memory=True)
-    valset = dataset.Dataset_new('val', config['timesteps'])
+    valset = dataset.Dataset_Latent_grasp_and_code('val', config['timesteps'], fake=False)
     valloader = torch.utils.data.DataLoader(valset, batch_size=config['val_batch_size'], shuffle=False, num_workers=num_workers, pin_memory=True)
 
     decoder = Decoder(
-        number_points=2048, point_dim=3, 
-        hidden_dim=model_config['dec_hidden_dim'], latent_dim=model_config['latent_dim'], 
+        latent_dim=128, hidden_dim=128, embedding_dim=120,  
         timesteps=config['timesteps'], beta_start=1e-4, beta_end=0.02)
 
     decoder.to(device)
@@ -280,8 +279,8 @@ if __name__ == "__main__":
     #tensorboard --logdir=logs
     
     # #Reload model
-    # experiment_name = "Jun16_17-40_100_Objects_1000epochs_64latent_enc128_dec256_globalnorm"
-    # config, model_config, encoder, decoder = utils.reload_model(optimizer, scheduler, experiment_name, 'checkpoint', device)
+    # experiment_name = "Jun16_17-40_epochs=1000 latent_dim=128 hidden_dim=128 embedding_dim=120"
+    # config, model_config, decoder = utils.reload_model(optimizer, scheduler, experiment_name, 'checkpoint', device)
     # config['max_epochs'] = 2000 - model_config['last_epoch']
     # print(f"Checkpoint loaded! {config['max_epochs']} more epochs to go!")
     # experiment_name = "Jun16_17-40_100_Objects_2000epochs_64latent_enc128_dec256_globalnorm"
