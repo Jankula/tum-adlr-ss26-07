@@ -319,6 +319,7 @@ if args.dry_run == False:
             chamfer_loss = 0
             
             for batch in val_dl:
+                batch = batch.to(device)
                 _, means, _ = model.encode(batch)
                 pred_pcs = model.decode(means, args.num_points)
                 chamfer_loss += chamfer_custom(pred_pcs, batch)
@@ -330,7 +331,7 @@ if args.dry_run == False:
                 logger(f"Saving new best model at Epoch: {i+1}\n" + f"Chamfer loss of the best model: {chamfer_loss:.3f}\n")
                 torch.save(model.state_dict(), save_path + "/best_model.pt")
 
-            chamfer_loss_history.append(chamfer_loss)
+            chamfer_loss_history.append(chamfer_loss.detach().cpu().numpy())
             epoch.append((i+1))
             previous_chamfer_loss = chamfer_loss
             
@@ -356,6 +357,7 @@ if args.dry_run == False:
     print("Start Testing")
     logger("Start Testing\n")
     for batch in test_dl:
+        batch = batch.to(device)
         latents, mean, _ = model.encode(batch)
         pred_pc_means = model.decode(mean, args.num_points)
         chamfer_means = chamfer_custom(batch, pred_pc_means)
