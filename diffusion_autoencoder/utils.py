@@ -1,6 +1,8 @@
 import torch
 import pathlib
-from latent_decoder import Decoder
+# from latent_decoder import Decoder
+from encoder import Encoder
+from decoder import Decoder
 
 
 def save_model_latent(decoder, optimizer, scheduler, config, model_config, type):
@@ -22,7 +24,8 @@ def reload_model_latent(optimizer, scheduler, experiment_name, type, device):
     
     model_config = checkpoint['model_config']
 
-    decoder = Decoder(number_points=2048, point_dim=3, hidden_dim=model_config['dec_hidden_dim'], latent_dim=model_config['latent_dim'], timesteps=config['timesteps'], beta_start=1e-4, beta_end=0.02)
+    decoder = Decoder(latent_dim=model_config['latent_dim'], hidden_dim=model_config['dec_hidden_dim'], embedding_dim=model_config['embedding_dim'],
+                       timesteps=config['timesteps'], beta_start=1e-4, beta_end=0.02)
 
     decoder.to(device)
 
@@ -34,46 +37,46 @@ def reload_model_latent(optimizer, scheduler, experiment_name, type, device):
 
     decoder.eval()
 
-    return config, model_config, encoder, decoder
+    return config, model_config, decoder
 
 
-# def save_model(encoder, decoder, optimizer, scheduler, config, model_config, type):
-#     checkpoint = {
-#     'encoder_state': encoder.state_dict(),
-#     'decoder_state': decoder.state_dict(),
-#     'optimizer_state': optimizer.state_dict(),
-#     'scheduler_state': scheduler.state_dict(),
-#     'config': config,
-#     'model_config': model_config
-#     }
-#     path = pathlib.Path(f'models/{config["experiment_name"]}')
-#     path.mkdir(parents=True, exist_ok=True)
-#     torch.save(checkpoint, pathlib.Path(f'models/{config["experiment_name"]}/{type}.pt'))
+def save_model(encoder, decoder, optimizer, scheduler, config, model_config, type):
+    checkpoint = {
+    'encoder_state': encoder.state_dict(),
+    'decoder_state': decoder.state_dict(),
+    'optimizer_state': optimizer.state_dict(),
+    'scheduler_state': scheduler.state_dict(),
+    'config': config,
+    'model_config': model_config
+    }
+    path = pathlib.Path(f'models/{config["experiment_name"]}')
+    path.mkdir(parents=True, exist_ok=True)
+    torch.save(checkpoint, pathlib.Path(f'models/{config["experiment_name"]}/{type}.pt'))
 
-# def reload_model(optimizer, scheduler, experiment_name, type, device):
-#     checkpoint = torch.load(pathlib.Path(f'models/{experiment_name}/{type}.pt'), weights_only=False, map_location=device)
+def reload_model(optimizer, scheduler, experiment_name, type, device):
+    checkpoint = torch.load(pathlib.Path(f'models/{experiment_name}/{type}.pt'), weights_only=False, map_location=device)
 
-#     config = checkpoint['config']
+    config = checkpoint['config']
     
-#     model_config = checkpoint['model_config']
+    model_config = checkpoint['model_config']
 
-#     encoder = Encoder(number_points=2048, in_channels=3, hidden_channels=model_config['enc_hidden_channels'], latent_dim=model_config['latent_dim'], clamp=False)
-#     decoder = Decoder(number_points=2048, point_dim=3, hidden_dim=model_config['dec_hidden_dim'], latent_dim=model_config['latent_dim'], timesteps=config['timesteps'], beta_start=1e-4, beta_end=0.02)
+    encoder = Encoder(number_points=2048, in_channels=3, hidden_channels=model_config['enc_hidden_channels'], latent_dim=model_config['latent_dim'], clamp=False)
+    decoder = Decoder(number_points=2048, point_dim=3, hidden_dim=model_config['dec_hidden_dim'], latent_dim=model_config['latent_dim'], timesteps=config['timesteps'], beta_start=1e-4, beta_end=0.02)
 
-#     encoder.to(device)
-#     decoder.to(device)
+    encoder.to(device)
+    decoder.to(device)
 
-#     encoder.load_state_dict(checkpoint['encoder_state'])
-#     decoder.load_state_dict(checkpoint['decoder_state'])
-#     if optimizer is not None:
-#         optimizer.load_state_dict(checkpoint['optimizer_state'])
-#     if scheduler is not None:
-#         scheduler.load_state_dict(checkpoint['scheduler_state'])
+    encoder.load_state_dict(checkpoint['encoder_state'])
+    decoder.load_state_dict(checkpoint['decoder_state'])
+    if optimizer is not None:
+        optimizer.load_state_dict(checkpoint['optimizer_state'])
+    if scheduler is not None:
+        scheduler.load_state_dict(checkpoint['scheduler_state'])
 
-#     encoder.eval()
-#     decoder.eval()
+    encoder.eval()
+    decoder.eval()
 
-#     return config, model_config, encoder, decoder
+    return config, model_config, encoder, decoder
 
 
 def count_parameters(model):

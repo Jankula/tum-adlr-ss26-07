@@ -133,47 +133,43 @@ class Dataset_Latent_grasp_and_pc(Dataset):
     Dataset for loading normalized point clouds as .npz files into RAM.
     """
     # Adjust this path to match your actual output directory from the preprocessing script
-    dataset_path = Path("/home/nikola/Projects/tum-adlr-ss26-07/diffusion_autoencoder/data") 
+    dataset_path = Path("/home/nikola/tum-adlr-ss26-07/diffusion_autoencoder/data") 
 
-    def __init__(self, split, timesteps):
+    def __init__(self, split):
         """
         :param split: one of 'train', 'val' or 'test' - for training, validation or test split
         :param timesteps: the artificial length of an epoch (useful for diffusion models)
         """
         super().__init__()
         assert split in ['train', 'val', 'test']
-        self.timesteps = timesteps
         self.split = split
         
         split_dir = self.dataset_path / split
-        file_paths = list(split_dir.glob("*.npz"))
-        
+        file_paths = sorted(list(split_dir.glob("*.npz")), key=lambda x: x.name)        
         all_pcs = []
-        all_joints = []
+        all_grasps = []
         
         for fp in tqdm(file_paths, desc=f"Loading {split} data"):
             data = np.load(fp)
             
             # Arrays are shape: [num_grasps, 2048, 3] and [num_grasps, 12]
             all_pcs.append(data["point_clouds"])
-            all_joints.append(data["joint_angles"])
+            all_grasps.append(data["joint_angles"])
             
-        # 2. Concatenate everything into massive NumPy arrays
+        # Concatenate everything into massive NumPy arrays
         # This effectively flattens the dataset so 1 index = 1 grasp
         if len(all_pcs) > 0:
             np_pcs = np.concatenate(all_pcs, axis=0)
-            np_joints = np.concatenate(all_joints, axis=0)
+            np_grasps = np.concatenate(all_grasps, axis=0)
         else:
             raise RuntimeError(f"No .npz files found in {split_dir}!")
             
-        # 3. Convert to compact PyTorch tensors
+        # Convert to compact PyTorch tensors
         # We keep these on the CPU RAM. The DataLoader workers will read from here
         # and move batches to the GPU (device) during the training loop.
         self.point_clouds = torch.tensor(np_pcs, dtype=torch.float32)
-        self.joint_angles = torch.tensor(np_joints, dtype=torch.float32)
+        self.grasps = torch.tensor(np_grasps, dtype=torch.float32)
         
-        self.real_length = len(self.point_clouds)
-
     def __getitem__(self, index):
         """
         Retrieves a single grasp sample.
@@ -182,14 +178,14 @@ class Dataset_Latent_grasp_and_pc(Dataset):
         # Returning a dictionary makes it very clean to unpack in the training loop
         return {
             "point_cloud": self.point_clouds[index],
-            "joint_angles": self.joint_angles[index],
+            "grasp": self.grasps[index],
         }
         
     def __len__(self):
         """
         :return: inflated length of the dataset dictated by timesteps
         """
-        return self.real_length
+        return len(self.grasps)
 
 
 class Dataset_Latent_grasp_and_code(Dataset):
@@ -197,37 +193,34 @@ class Dataset_Latent_grasp_and_code(Dataset):
     Dataset for loading normalized point clouds as .npz files into RAM.
     """
     # Adjust this path to match your actual output directory from the preprocessing script
-    dataset_path = Path("/home/nikola/Projects/tum-adlr-ss26-07/diffusion_autoencoder/lean_data") 
+    dataset_path = Path("/home/nikola/tum-adlr-ss26-07/diffusion_autoencoder/lean_data") 
 
-    def __init__(self, split, timesteps, fake):
+    def __init__(self, split):
         """
         :param split: one of 'train', 'val' or 'test' - for training, validation or test split
         :param timesteps: the artificial length of an epoch (useful for diffusion models)
         """
         super().__init__()
         assert split in ['train', 'val', 'test']
-        self.timesteps = timesteps
         self.split = split
-        self.fake = fake
         
         split_dir = self.dataset_path / split
-        file_paths = list(split_dir.glob("*.npz"))
-        
+        file_paths = sorted(list(split_dir.glob("*.npz")), key=lambda x: x.name)        
         all_codes = []
-        all_joints = []
+        all_grasps = []
         
         for fp in tqdm(file_paths, desc=f"Loading {split} data"):
             data = np.load(fp)
             
             # Arrays are shape: [num_grasps, 2048, 3] and [num_grasps, 12]
             all_codes.append(data["codes"])
-            all_joints.append(data["joint_angles"])
+            all_grasps.append(data["joint_angles"])
             
         # 2. Concatenate everything into massive NumPy arrays
         # This effectively flattens the dataset so 1 index = 1 grasp
         if len(all_codes) > 0:
             np_codes = np.concatenate(all_codes, axis=0)
-            np_joints = np.concatenate(all_joints, axis=0)
+            np_grasps = np.concatenate(all_grasps, axis=0)
         else:
             raise RuntimeError(f"No .npz files found in {split_dir}!")
             
@@ -235,28 +228,18 @@ class Dataset_Latent_grasp_and_code(Dataset):
         # We keep these on the CPU RAM. The DataLoader workers will read from here
         # and move batches to the GPU (device) during the training loop.
         self.codes = torch.tensor(np_codes, dtype=torch.float32)
-        self.joint_angles = torch.tensor(np_joints, dtype=torch.float32)
+        self.grasps = torch.tensor(np_grasps, dtype=torch.float32)
         
-        self.real_length = len(self.codes)
 
     def __getitem__(self, index):
         """
-        Retrieves a single grasp sample.
-        Because timesteps > real_length, we use modulo to loop over the real data.
         """
-        real_idx = index % self.real_length
-        
-        # Returning a dictionary makes it very clean to unpack in the training loop
         return {
-            "code": self.codes[real_idx],
-            "grasp": self.joint_angles[real_idx],
+            "code": self.codes[index],
+            "grasp": self.grasps[index],
         }
         
     def __len__(self):
         """
-        :return: inflated length of the dataset dictated by timesteps
         """
-        if self.fake:
-            return self.timesteps
-        else:
-            return self.real_length
+        return len(self.codes)

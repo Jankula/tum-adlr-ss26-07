@@ -13,8 +13,8 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    RAW_DATA_DIR = Path("/home/nikola/Projects/tum-adlr-ss26-07/diffusion_autoencoder/data")
-    LEAN_DATA_DIR = Path("/home/nikola/Projects/tum-adlr-ss26-07/diffusion_autoencoder/lean_data")
+    RAW_DATA_DIR = Path("/home/nikola/tum-adlr-ss26-07/diffusion_autoencoder/data")
+    LEAN_DATA_DIR = Path("/home/nikola/tum-adlr-ss26-07/diffusion_autoencoder/lean_data")
     
     experiment_name = "Jun23_11-47_7000epochs_128latent_enc128_dec512_globalnorm"
     print(f"Loading pre-trained checkpoint: {experiment_name}...")
@@ -33,7 +33,7 @@ def main():
         # Recreate mirror output folder cleanly
         dst_split_dir.mkdir(parents=True, exist_ok=True)
         
-        file_paths = list(src_split_dir.glob("*.npz"))
+        file_paths = sorted(list(src_split_dir.glob("*.npz")), key=lambda x: x.name)        
         print(f"\nProcessing {len(file_paths)} files in '{split}' split...")
 
         for fp in tqdm(file_paths, desc=f"Encoding {split}"):
@@ -53,10 +53,9 @@ def main():
                     
                     # Compute distributions and sample code vector
                     mean, log_variance = encoder(pc_tensor)
-                    code_tensor = encoder.sample_latent_z(mean, log_variance)
                     
                     # Store back as a clean numpy array on CPU: shape [latent_dim]
-                    computed_codes.append(code_tensor.squeeze(0).cpu().numpy())
+                    computed_codes.append(mean.squeeze(0).cpu().numpy())
 
             # Stack individual grasp codes into matrix shape: [num_grasps, latent_dim]
             np_codes = np.stack(computed_codes, axis=0)

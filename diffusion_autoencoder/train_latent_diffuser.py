@@ -2,7 +2,7 @@ import pathlib
 import os
 import datetime
 from collections import defaultdict
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+# os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
 
 import numpy as np
 import torch
@@ -74,41 +74,43 @@ def train(decoder, trainloader, valloader, device, optimizer, scheduler, config,
             # debug_file.write('train_loss_epoch_running: ' + str(train_loss_epoch_running) + '\n')
             # debug_file.flush()
 
-            iteration = epoch * len(trainloader) + i
+            # iteration = epoch * len(trainloader) + i
 
             # Train Loss
-            if iteration % config['print_every_n'] == (config['print_every_n'] - 1):
-                print(f'[{epoch:03d}/{i:03d}] train_loss: {train_loss_running / config["print_every_n"]:.3f}')
-                writer_train.add_scalar("Loss", train_loss_running / config["print_every_n"], iteration*config['train_batch_size'])
+            if epoch % config['print_every_n'] == (config['print_every_n'] - 1):
+                print(f'[{epoch:03d}] train_loss: {train_loss_running / config["print_every_n"]:.3f}')
+                writer_train.add_scalar("Loss", train_loss_running / config["print_every_n"], epoch)
                 train_loss_running = 0.
 
             # Average loss per timestep     
-            for t_val, item_mse in zip(timestep_batch.tolist(), mse_loss_per_item.tolist()):
-                timestep_loss_sum[t_val] += item_mse
-                timestep_counts[t_val] += 1
+            if epoch % config['average_MSE_every_n'] == (config['average_MSE_every_n'] - 1):
+                for t_val, item_mse in zip(timestep_batch.tolist(), mse_loss_per_item.tolist()):
+                    timestep_loss_sum[t_val] += item_mse
+                    timestep_counts[t_val] += 1
 
         # Average loss per timestep
-        avg_error_list = []
-        valid_timesteps = []
-        for time_val in range(diffuser.T):
-            if timestep_counts[time_val] > 0:
-                avg_error = timestep_loss_sum[time_val] / timestep_counts[time_val]
-                avg_error_list.append(avg_error)
-                valid_timesteps.append(time_val)
-                writer_train.add_scalar(f"MSE Timestep Error/Epoch_{epoch:03d}", avg_error, global_step=time_val)
+        if epoch % config['average_MSE_every_n'] == (config['average_MSE_every_n'] - 1):
+            avg_error_list = []
+            valid_timesteps = []
+            for time_val in range(diffuser.T):
+                if timestep_counts[time_val] > 0:
+                    avg_error = timestep_loss_sum[time_val] / timestep_counts[time_val]
+                    avg_error_list.append(avg_error)
+                    valid_timesteps.append(time_val)
+                    writer_train.add_scalar(f"MSE Timestep Error/Epoch_{epoch:03d}", avg_error, global_step=time_val)
         
-        # Calculate the integral of the average mse per timestep
-        MSE_per_timestep_integral = trapezoid(np.array(avg_error_list), np.array(valid_timesteps))
-        writer_train.add_scalar(f"MSE per Timestep Integral", MSE_per_timestep_integral, epoch)
-        # print(f"[{epoch:03d}] integral: {MSE_per_timestep_integral:.05}")
-        if MSE_per_timestep_integral < model_config['best_integral']:
-                model_config['best_integral'] = MSE_per_timestep_integral
-                utils.save_model(decoder, optimizer, scheduler, config, model_config, type = 'best_integral')
-                # print(f'Best  Model:  {best_chamfer_loss:.05f}')
+            # Calculate the integral of the average mse per timestep
+            MSE_per_timestep_integral = trapezoid(np.array(avg_error_list), np.array(valid_timesteps))
+            writer_train.add_scalar(f"MSE per Timestep Integral", MSE_per_timestep_integral, epoch)
+            # print(f"[{epoch:03d}] integral: {MSE_per_timestep_integral:.05}")
+            if MSE_per_timestep_integral < model_config['best_integral']:
+                    model_config['best_integral'] = MSE_per_timestep_integral
+                    utils.save_model_latent(decoder, optimizer, scheduler, config, model_config, type = 'best_integral')
+                    # print(f'Best  Model:  {best_chamfer_loss:.05f}')
 
-        # Clear dictionaries so the next epoch tracks completely fresh averages
-        timestep_loss_sum.clear()
-        timestep_counts.clear()
+            # Clear dictionaries so the next epoch tracks completely fresh averages
+            timestep_loss_sum.clear()
+            timestep_counts.clear()
 
         # Weight plotting
         # for name, weight in encoder.named_parameters():
@@ -150,29 +152,29 @@ def train(decoder, trainloader, valloader, device, optimizer, scheduler, config,
                 loss_total_val += loss.item()
                 
                 # Average loss per timestep     
-                for t_val, item_mse in zip(timestep_batch.tolist(), mse_loss_per_item.tolist()):
-                    val_timestep_loss_sum[t_val] += item_mse
-                    val_timestep_counts[t_val] += 1
+                # for t_val, item_mse in zip(timestep_batch.tolist(), mse_loss_per_item.tolist()):
+                #     val_timestep_loss_sum[t_val] += item_mse
+                #     val_timestep_counts[t_val] += 1
             
             # Val Loss
             loss_val = loss_total_val / len(valloader)
             print(f'[{epoch:03d}] val_loss: {loss_val:.3f}')
-            writer_val.add_scalar("Loss", loss_val, iteration*config['train_batch_size'])
+            writer_val.add_scalar("Loss", loss_val, epoch)
             
 
-            avg_error_list = []
-            valid_timesteps = []
-            for time_val in range(diffuser.T):
-                if val_timestep_counts[time_val] > 0:
-                    avg_error = val_timestep_loss_sum[time_val] / val_timestep_counts[time_val]
-                    avg_error_list.append(avg_error)
-                    valid_timesteps.append(time_val)
-                    writer_val.add_scalar(f"Val MSE Timestep Error/Epoch_{epoch:03d}", avg_error, global_step=time_val)
+            # avg_error_list = []
+            # valid_timesteps = []
+            # for time_val in range(diffuser.T):
+            #     if val_timestep_counts[time_val] > 0:
+            #         avg_error = val_timestep_loss_sum[time_val] / val_timestep_counts[time_val]
+            #         avg_error_list.append(avg_error)
+            #         valid_timesteps.append(time_val)
+            #         writer_val.add_scalar(f"Val MSE Timestep Error/Epoch_{epoch:03d}", avg_error, global_step=time_val)
 
 
             if loss_val < model_config['best_val_loss']:
                 model_config['best_val_loss'] = loss_val
-                utils.save_model(decoder, optimizer, scheduler, config, model_config, type = 'best_val')
+                utils.save_model_latent(decoder, optimizer, scheduler, config, model_config, type = 'best_val')
                 # print(f"Best val Model:  {model_config['best_val_loss']:.05f}")
 
             decoder.train()
@@ -186,25 +188,17 @@ def train(decoder, trainloader, valloader, device, optimizer, scheduler, config,
 
 
         train_loss_epoch = train_loss_epoch_running / len(trainloader)
-        #DEBUG
-        # debug_file.write('train_loss_epoch: ' + str(train_loss_epoch) + '\n')
-        # debug_file.flush()
-        #DEBUG
 
         # Save model weights if the best loss is achieved  
         if  train_loss_epoch < model_config['best_train_loss']:
             model_config['best_train_loss'] = train_loss_epoch
-            utils.save_model(decoder, optimizer, scheduler, config, model_config, type = "best_train")
+            utils.save_model_latent(decoder, optimizer, scheduler, config, model_config, type = "best_train")
             print(f"Best train Model: {model_config['best_train_loss']:.03f}")
-            #DEBUG
-            # debug_file.write('best_train_loss: ' + str(best_train_loss) + '\n')
-            # debug_file.flush()
-            #DEBUG
 
         
         # Checkpoint saving
         model_config['last_epoch'] = epoch
-        utils.save_model(decoder, optimizer, scheduler, config, model_config, type = 'checkpoint')
+        utils.save_model_latent(decoder, optimizer, scheduler, config, model_config, type = 'checkpoint')
 
 
     print('Best Loss: ', model_config['best_train_loss'])
@@ -220,28 +214,30 @@ if __name__ == "__main__":
 
     # Model name
     current_time = datetime.datetime.now().strftime("%b%d_%H-%M")
-    denoiser_name = "epochs=1000_latent_dim=128_hidden_dim=128_embedding_dim=120"
+    denoiser_name = "epochs=2000_latent_dim=128_hidden_dim=512_embedding_dim=120"
+    # denoiser_name = "TEST"
     experiment_name = f"{current_time}_{denoiser_name}"
 
 
     config = {
         'experiment_name': experiment_name,
         'device': 'cuda:0',
-        'train_batch_size': 64,
-        'val_batch_size': 128,
+        'train_batch_size': 64*4096,
+        'val_batch_size': 64*4096,
         'learning_rate': 0.0004,
         'step_size': 10, # scheduler step, one step is one batch
         'gamma': 1,
-        'max_epochs': 1000,
+        'max_epochs': 2000,
         'timesteps': 1000,
-        'print_every_n': 30, # every n batches
-        'validate_every_n_epochs': 15,
+        'print_every_n': 1, # every n batches
+        'validate_every_n_epochs': 1,
+        'average_MSE_every_n': 10
     }
 
     model_config = {
         'last_epoch': 0,
         'latent_dim': 128,
-        'hidden_dim': 128,
+        'hidden_dim': 1024,
         'embedding_dim': 120,
         'best_train_loss': 100,
         'best_chamfer_loss': 100,
@@ -257,14 +253,14 @@ if __name__ == "__main__":
         print('Using CPU')
 
     num_workers = max(1, os.cpu_count() - 1)
-    print(num_workers)
-    trainset = dataset.Dataset_Latent_grasp_and_code('train', config['timesteps'], fake=True)
+    print(f"Number of workers: {num_workers}")
+    trainset = dataset.Dataset_Latent_grasp_and_code('train')
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=config['train_batch_size'], shuffle=True, num_workers=num_workers, pin_memory=True)
-    valset = dataset.Dataset_Latent_grasp_and_code('val', config['timesteps'], fake=False)
+    valset = dataset.Dataset_Latent_grasp_and_code('val')
     valloader = torch.utils.data.DataLoader(valset, batch_size=config['val_batch_size'], shuffle=False, num_workers=num_workers, pin_memory=True)
 
     decoder = Decoder(
-        latent_dim=128, hidden_dim=128, embedding_dim=120,  
+        latent_dim=model_config['latent_dim'], hidden_dim=model_config['hidden_dim'], embedding_dim=model_config['embedding_dim'],  
         timesteps=config['timesteps'], beta_start=1e-4, beta_end=0.02)
 
     decoder.to(device)

@@ -26,8 +26,8 @@ class Diffuser(nn.Module):
         noise = torch.randn_like(x_0)
         
         # We use [t] to index, then [:, None, None] to match [Batch, N, 3]
-        s_alpha = self.sqrt_alpha_cumprod[t][:, None, None]
-        s_one_minus_alpha = self.sqrt_one_minus_alpha_cumprod[t][:, None, None]
+        s_alpha = self.sqrt_alpha_cumprod[t][:, None]
+        s_one_minus_alpha = self.sqrt_one_minus_alpha_cumprod[t][:, None]
         
         x_t = s_alpha * x_0 + s_one_minus_alpha * noise
         return x_t, noise
@@ -90,85 +90,176 @@ class Decoder(nn.Module):
         self.denoiser = PointwiseNet(latent_dim, hidden_dim, embedding_dim)
 
 
+# @torch.no_grad()
+# def sample_ddpm(decoder, grasp, n_points=2048, timesteps=1000):
+#     """Generate a sample using the DDPM reverse diffusion process.
+
+#     Args:
+#         decoder: Decoder model containing the diffuser and denoiser modules.
+#         code: Latent code used as conditioning input for the denoiser, shape (B, F).
+#         n_points: Number of points to generate in the output point cloud.
+
+#     Returns:
+#         Generated point cloud tensor of shape (1, n_points, 3).
+#     """
+#     diffuser = decoder.diffuser
+#     denoiser = decoder.denoiser
+
+#     denoiser.eval()
+#     device = diffuser.beta.device
+#     # 1. Start with pure noise
+#     x = torch.randn(1, n_points, 3, device=device)
+    
+#     # 2. Step backwards from T to 1
+#     for i in reversed(range(timesteps)):
+#         t = torch.tensor([i], device=device)
+#         beta = diffuser.beta[t]
+#         beta = beta.to(device)
+
+#         predicted_noise = denoiser(x, beta, code)
+        
+#         # Math for the reverse step
+#         alpha = diffuser.alpha[i]
+#         alpha_cumprod = diffuser.alpha_cumprod[i]
+#         beta = diffuser.beta[i]
+        
+#         noise_factor = (1 - alpha) / torch.sqrt(1 - alpha_cumprod)
+#         x = (1 / torch.sqrt(alpha)) * (x - noise_factor * predicted_noise)
+        
+#         if i > 0: # Add a little bit of randomness back in (Langevin dynamics)
+#             x += torch.sqrt(beta) * torch.randn_like(x)
+            
+#     return x
+
 @torch.no_grad()
-def sample_ddpm(decoder, code, n_points=2048, timesteps=1000):
-    """Generate a sample using the DDPM reverse diffusion process.
+def sample_ddpm(decoder, grasp, latent_dim=128, timesteps=1000):
+    """Generate a 128-dimensional latent code batch using the DDPM reverse diffusion process.
 
     Args:
         decoder: Decoder model containing the diffuser and denoiser modules.
-        code: Latent code used as conditioning input for the denoiser, shape (B, F).
-        n_points: Number of points to generate in the output point cloud.
+        grasp: Grasp shape latents used as conditioning input, shape (B, 12).
+        latent_dim: The dimensionality of your flat latent code (128).
+        timesteps: Total number of diffusion timesteps (1000).
 
     Returns:
-        Generated point cloud tensor of shape (1, n_points, 3).
+        Generated latent code tensor of shape (B, latent_dim).
     """
     diffuser = decoder.diffuser
     denoiser = decoder.denoiser
-
     denoiser.eval()
-    device = diffuser.beta.device
-    # 1. Start with pure noise
-    x = torch.randn(1, n_points, 3, device=device)
-    
-    # 2. Step backwards from T to 1
-    for i in reversed(range(timesteps)):
-        t = torch.tensor([i], device=device)
-        beta = diffuser.beta[t]
-        beta = beta.to(device)
 
-        predicted_noise = denoiser(x, beta, code)
+    device = diffuser.beta.device
+    batch_size = grasp.shape[0]  # Dynamically match your input batch size
+
+    # 1. Start with pure noise matching your [B, 128] latent vector dimension
+    x = torch.randn(batch_size, latent_dim, device=device)
+    
+    # 2. Step backwards from T-1 down to 0
+    for i in reversed(range(timesteps)):
+        # Create a batch-sized time tensor for the denoiser
+        t = torch.tensor([i], device=device).repeat(batch_size)
         
-        # Math for the reverse step
+        # Predict the noise using the correct signature order: (x, time, grasp)
+        predicted_noise = denoiser(x, t, grasp)
+        
+        # Grab scalar values for step calculations
         alpha = diffuser.alpha[i]
         alpha_cumprod = diffuser.alpha_cumprod[i]
         beta = diffuser.beta[i]
         
+        # DDPM Reverse Step Math
         noise_factor = (1 - alpha) / torch.sqrt(1 - alpha_cumprod)
         x = (1 / torch.sqrt(alpha)) * (x - noise_factor * predicted_noise)
         
-        if i > 0: # Add a little bit of randomness back in (Langevin dynamics)
+        # Add Langevin noise back in if we aren't at the very last step (i > 0)
+        if i > 0:
             x += torch.sqrt(beta) * torch.randn_like(x)
             
     return x
 
 
-@torch.no_grad()
-def sample_ddim(decoder, code, n_points=2048, steps=50, timesteps=1000):
-    """Generate a sample using the DDIM reverse diffusion process.
+# @torch.no_grad()
+# def sample_ddim(decoder, grasp, latent_dim=128, steps=50, timesteps=1000):
+#     """Generate a sample using the DDIM reverse diffusion process.
 
-    Args:
-        decoder: Decoder model containing the diffuser and denoiser modules.
-        code: Latent code used as conditioning input for the denoiser, shape (B, F).
-        n_points: Number of points to generate in the output point cloud.
-        steps: Number of inference steps to use in the DDIM scheduler.
+#     Args:
+#         decoder: Decoder model containing the diffuser and denoiser modules.
+#         steps: Number of inference steps to use in the DDIM scheduler.
 
-    Returns:
-        Generated point cloud tensor of shape (1, n_points, 3).
-    """
+#     Returns:
+#         Generated point cloud tensor of shape (1, n_points, 3).
+#     """
     
+#     diffuser = decoder.diffuser
+#     denoiser = decoder.denoiser
+#     denoiser.eval()
+    
+#     device  = diffuser.beta.device
+#     x = torch.randn(1, latent_dim, device=device)
+    
+#     # Define the sparse schedule (e.g., [980, 960, ..., 0])
+#     times = torch.linspace(timesteps-1, 0, steps).long()
+    
+#     for i in range(len(times)):
+#         t = times[i].unsqueeze(0)
+#         t = t.to(device)
+#         prev_t = times[i+1].unsqueeze(0) if i+1 < len(times) else torch.tensor([-1])
+#         prev_t = prev_t.to(device)
+        
+#         pred_noise = denoiser(x, t, grasp)
+        
+#         alpha_t = diffuser.alpha_cumprod[t]
+#         alpha_prev = diffuser.alpha_cumprod[prev_t] if prev_t >= 0 else torch.tensor([1.0], device=device)
+        
+#         pred_x0 = (x - torch.sqrt(1 - alpha_t) * pred_noise) / torch.sqrt(alpha_t)
+        
+#         direction_xt = torch.sqrt(1 - alpha_prev) * pred_noise
+        
+#         x = torch.sqrt(alpha_prev) * pred_x0 + direction_xt
+        
+#     return x
+
+@torch.no_grad()
+def sample_ddim(decoder, grasp, latent_dim=128, steps=50, timesteps=1000):
+    """Generate a sample using the DDIM reverse diffusion process."""
     diffuser = decoder.diffuser
     denoiser = decoder.denoiser
-    
     denoiser.eval()
-    device  = diffuser.beta.device
-    x = torch.randn(1, n_points, 3, device=device)
     
-    # Define the sparse schedule (e.g., [980, 960, ..., 0])
-    times = torch.linspace(timesteps-1, 0, steps).long()
+    device = diffuser.beta.device
+    batch_size = grasp.shape[0]  # Dynamically adapt to input batch size
     
-    for i in range(len(times)):
-        t = times[i].unsqueeze(0)
-        t = t.to(device)
-        prev_t = times[i+1].unsqueeze(0) if i+1 < len(times) else torch.tensor([-1])
-        prev_t = prev_t.to(device)
+    # Initialize noise matching your exact batch and latent dimensions
+    x = torch.randn(batch_size, latent_dim, device=device)
+    
+    # Create steps + 1 points so we can cleanly pair up every step t with its prev_t
+    # Example for 5 steps: [999, 749, 499, 249, 0, -1]
+    times = torch.linspace(timesteps - 1, 0, steps).long().tolist()
+    times.append(-1)  # Explicitly add the final boundary step
+    
+    for i in range(steps):
+        # Extract scalar timesteps
+        t_val = times[i]
+        prev_t_val = times[i+1]
         
-        pred_noise = denoiser(x, t, code)
+        # Create batch-sized time tensors
+        t = torch.tensor([t_val], device=device).repeat(batch_size)
         
-        alpha_t = diffuser.alpha_cumprod[t]
-        alpha_prev = diffuser.alpha_cumprod[prev_t] if prev_t >= 0 else torch.tensor([1.0], device=device)
+        # Predict the noise using the correct order: (x, time, grasp)
+        pred_noise = denoiser(x, t, grasp)
         
+        # Pull alpha parameters and shape them as [B, 1] for smooth broadcasting
+        alpha_t = diffuser.alpha_cumprod[t].unsqueeze(-1)
+        
+        if prev_t_val >= 0:
+            prev_t = torch.tensor([prev_t_val], device=device).repeat(batch_size)
+            alpha_prev = diffuser.alpha_cumprod[prev_t].unsqueeze(-1)
+        else:
+            # When dropping below 0, alpha_prev is exactly 1.0 (no noise left)
+            alpha_prev = torch.ones(batch_size, 1, device=device)
+        
+        # DDIM core update equations
         pred_x0 = (x - torch.sqrt(1 - alpha_t) * pred_noise) / torch.sqrt(alpha_t)
-        
         direction_xt = torch.sqrt(1 - alpha_prev) * pred_noise
         
         x = torch.sqrt(alpha_prev) * pred_x0 + direction_xt
