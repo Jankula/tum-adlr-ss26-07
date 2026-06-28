@@ -214,7 +214,7 @@ if __name__ == "__main__":
 
     # Model name
     current_time = datetime.datetime.now().strftime("%b%d_%H-%M")
-    denoiser_name = "epochs=2000_latent_dim=128_hidden_dim=512_embedding_dim=120"
+    denoiser_name = "epochs=2000_latent_dim=128_hidden_dim=512_embedding_dim=240"
     # denoiser_name = "TEST"
     experiment_name = f"{current_time}_{denoiser_name}"
 
@@ -222,8 +222,8 @@ if __name__ == "__main__":
     config = {
         'experiment_name': experiment_name,
         'device': 'cuda:0',
-        'train_batch_size': 64*4096,
-        'val_batch_size': 64*4096,
+        'train_batch_size': 16*4096,
+        'val_batch_size': 16*4096,
         'learning_rate': 0.0004,
         'step_size': 10, # scheduler step, one step is one batch
         'gamma': 1,
@@ -238,7 +238,7 @@ if __name__ == "__main__":
         'last_epoch': 0,
         'latent_dim': 128,
         'hidden_dim': 1024,
-        'embedding_dim': 120,
+        'embedding_dim': 240,
         'best_train_loss': 100,
         'best_chamfer_loss': 100,
         'best_val_loss': 100,

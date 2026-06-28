@@ -1,8 +1,8 @@
 import torch
 import pathlib
-# from latent_decoder import Decoder
-from encoder import Encoder
-from decoder import Decoder
+from latent_decoder import Decoder
+# from encoder import Encoder
+# from decoder import Decoder
 
 
 def save_model_latent(decoder, optimizer, scheduler, config, model_config, type):
