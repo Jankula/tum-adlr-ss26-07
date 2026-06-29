@@ -190,4 +190,159 @@ class PointnetVAE(nn.Module):
         z = self.sample_latent_z(mean, log_variance)
         return self.decoder(z), mean, log_variance # Reconstructed Point Cloud + mean and log_variance for KLD loss
     
+
+
+class LocalPointNetEncoder(nn.Module):
+    def __init__(
+        self,
+        number_points=512,
+        in_channels=3,
+        num_patches=8,
+        points_per_patch=64,
+        local_latent_dim=16,
+        hidden_channels=64,
+        latent_dim=128,
+        use_center=True,
+        clamp=False,
+    ):
+        super().__init__()
+
+        self.number_points = number_points
+        self.in_channels = in_channels
+        self.num_patches = num_patches
+        self.points_per_patch = points_per_patch
+        self.local_latent_dim = local_latent_dim
+        self.latent_dim = latent_dim
+        self.use_center = use_center
+        self.clamp = clamp
+
+        # relative xyz + optional center xyz
+        local_input_dim = in_channels + (3 if use_center else 0)
+
+        self.local_pointnet = nn.Sequential(
+            nn.Conv1d(local_input_dim, hidden_channels, 1),
+            nn.BatchNorm1d(hidden_channels),
+            nn.ReLU(),
+
+            nn.Conv1d(hidden_channels, 2 * hidden_channels, 1),
+            nn.BatchNorm1d(2 * hidden_channels),
+            nn.ReLU(),
+
+            nn.Conv1d(2 * hidden_channels, 4 * hidden_channels, 1),
+            nn.BatchNorm1d(4 * hidden_channels),
+            nn.ReLU(),
+
+            nn.Conv1d(4 * hidden_channels, local_latent_dim, 1),
+        )
+
+        # Falls num_patches * local_latent_dim != latent_dim,
+        # mappe sauber auf gewünschten latent_dim.
+        self.global_projection_mean = nn.Sequential(
+            nn.Linear(num_patches * local_latent_dim, latent_dim),
+            nn.LayerNorm(latent_dim),
+            nn.ReLU(),
+            nn.Linear(latent_dim, latent_dim),
+        )
+        
+        self.global_projection_var = nn.Sequential(
+            nn.Linear(num_patches * local_latent_dim, latent_dim),
+            nn.LayerNorm(latent_dim),
+            nn.ReLU(),
+            nn.Linear(latent_dim, latent_dim),
+        )
+    
+    def farthest_point_sampling(self, x, num_centers):
+        """
+        x: [B, N, 3]
+        returns indices: [B, num_centers]
+        """
+        B, N, _ = x.shape
+        device = x.device
+
+        centers = torch.zeros(B, num_centers, dtype=torch.long, device=device)
+        distances = torch.full((B, N), float("inf"), device=device)
+
+        farthest = torch.randint(0, N, (B,), device=device)
+        batch_indices = torch.arange(B, device=device)
+
+        for i in range(num_centers):
+            centers[:, i] = farthest
+            centroid = x[batch_indices, farthest].view(B, 1, 3)
+            dist = torch.sum((x - centroid) ** 2, dim=-1)
+            distances = torch.minimum(distances, dist)
+            farthest = torch.max(distances, dim=1)[1]
+
+        return centers
+
+
+    def index_points(self, x, idx):
+        """
+        x: [B, N, C]
+        idx: [B, S] or [B, S, K]
+        returns: [B, S, C] or [B, S, K, C]
+        """
+        B = x.shape[0]
+        batch_shape = idx.shape
+        batch_indices = torch.arange(B, device=x.device).view(B, *([1] * (idx.dim() - 1)))
+        batch_indices = batch_indices.expand_as(idx)
+        return x[batch_indices, idx]
+
+
+    def knn_group(self, x, centers, k):
+        """
+        x: [B, N, 3]
+        centers: [B, S, 3]
+        returns grouped points: [B, S, K, 3]
+        """
+        dists = torch.cdist(centers, x)  # [B, S, N]
+        idx = dists.topk(k=k, dim=-1, largest=False)[1]  # [B, S, K]
+        grouped = self.index_points(x, idx)  # [B, S, K, 3]
+        return grouped
+
+    def forward(self, x):
+        """
+        x: [B, N, 3]
+        returns z: [B, latent_dim]
+        """
+        B, N, C = x.shape
+
+        assert C == self.in_channels, f"Expected {self.in_channels} channels, got {C}"
+        assert N >= self.points_per_patch, "points_per_patch must be <= number of input points"
+
+        # 1. FPS-Zentren wählen
+        center_idx = self.farthest_point_sampling(x, self.num_patches)  # [B, S]
+        centers = self.index_points(x, center_idx)  # [B, S, 3]
+
+        # 2. KNN-Gruppen um Zentren bilden
+        grouped = self.knn_group(x, centers, self.points_per_patch)  # [B, S, K, 3]
+
+        # 3. Relative Koordinaten
+        relative = grouped - centers.unsqueeze(2)  # [B, S, K, 3]
+
+        if self.use_center:
+            center_features = centers.unsqueeze(2).expand(-1, -1, self.points_per_patch, -1)
+            local_input = torch.cat([relative, center_features], dim=-1)  # [B, S, K, 6]
+        else:
+            local_input = relative  # [B, S, K, 3]
+
+        # 4. Shared Local PointNet auf alle Patches anwenden
+        B, S, K, D = local_input.shape
+        local_input = local_input.reshape(B * S, K, D)      # [B*S, K, D]
+        local_input = local_input.transpose(1, 2)           # [B*S, D, K]
+
+        local_features = self.local_pointnet(local_input)   # [B*S, local_latent_dim, K]
+        local_features = torch.max(local_features, dim=-1)[0]  # [B*S, local_latent_dim]
+
+        # 5. Lokale Latents konkatenieren
+        local_features = local_features.reshape(B, S * self.local_latent_dim)  # [B, S*local_latent_dim]
+
+        # 6. Auf finalen Latent Space projizieren
+        mean = self.global_projection_mean(local_features)  # [B, latent_dim]
+        log_variance = self.global_projection_var(local_features)  # [B, latent_dim]
+        
+        if self.clamp:
+            log_variance = torch.clamp(log_variance, min=-30.0, max=20.0) # For numerical stability
+
+        return mean, log_variance
+    
     

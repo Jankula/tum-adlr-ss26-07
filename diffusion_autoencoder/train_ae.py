@@ -211,7 +211,7 @@ if args.resume:
     model = AutoEncoder(model_state_dict["args"]).to(device)
     model.load_state_dict(model_state_dict["state_dict"])
 else:
-    model = AutoEncoder(args.num_points, 3, args.hidden_dim, args.latent_dim, args.num_steps, args.beta_1, args.beta_T, args.kl_start).to(device)
+    model = AutoEncoderPP(args.num_points, 3, args.hidden_dim, args.latent_dim, args.num_steps, args.beta_1, args.beta_T, args.kl_start).to(device)
 
     print(f"\nBuilding new Model with num_points: {args.num_points}, hidden_dim: {args.hidden_dim}, latent_dim: {args.latent_dim} \
           \nnum_steps: {args.num_steps}, beta_1: {args.beta_1}, beta_T: {args.beta_T}, kl_start: {args.kl_start}, kl_end: {args.kl_end}")
@@ -312,7 +312,7 @@ if args.dry_run == False:
             
         model.train()
         
-        if(i+1) % 50 == 0:
+        if(i+1) % 5 == 0:
             
             model.eval()
             

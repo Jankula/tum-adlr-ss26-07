@@ -187,6 +187,46 @@ class AutoEncoder(nn.Module):
         denoiser_loss = self.diffusion.get_loss(x, code)
         return denoiser_loss + encoder_loss, encoder_loss
 
+class AutoEncoderPP(nn.Module):
+
+    def __init__(self, number_points=256, point_dim=3, hidden_dim=32, latent_dim=32, num_steps=1000, beta_1=1e-4, beta_T=0.05, kl_start=1e-4):
+        super().__init__()
+        self.kl_state = kl_start
+        self.encoder = LocalPointNetEncoder(number_points=number_points, in_channels=point_dim, hidden_channels=2 * hidden_dim, latent_dim=latent_dim)
+        self.diffusion = DiffusionPoint(
+            net = PointwiseNet(point_dim=point_dim, context_dim=latent_dim, hidden_dim=hidden_dim, residual=True),
+            var_sched = VarianceSchedule(
+                num_steps=num_steps,
+                beta_1=beta_1,
+                beta_T=beta_T,
+                mode="linear"
+            )
+        )
+
+    def encode(self, x):
+        """
+        Args:
+            x:  Point clouds to be encoded, (B, N, d).
+        """
+        mean, log_variance = self.encoder(x)
+        
+        return self.sample_latent_z(mean, log_variance), mean, log_variance
+    
+    def sample_latent_z(self, mean, log_variance):
+        std = torch.exp(0.5 * log_variance) # compute std from log_variance
+        eps = torch.randn_like(mean)
+        return mean + eps * std
+
+    def decode(self, code, num_points, flexibility=0.0, ret_traj=False):
+        return self.diffusion.sample(num_points, code, flexibility=flexibility, ret_traj=ret_traj)
+    
+
+    def get_loss(self, x):
+        code, mean, log_variance = self.encode(x)
+        encoder_loss = self.kl_state * KLD_loss(mean, log_variance)
+        denoiser_loss = self.diffusion.get_loss(x, code)
+        return denoiser_loss + encoder_loss, encoder_loss
+
 class AutoEncoder_old(nn.Module):
 
     def __init__(self, number_points=256, point_dim=3, hidden_dim=32, latent_dim=32, num_steps=1000, beta_1=1e-4, beta_T=0.05, kl_start=1e-4):
