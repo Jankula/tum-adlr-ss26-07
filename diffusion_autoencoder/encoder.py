@@ -250,6 +250,20 @@ class LocalPointNetEncoder(nn.Module):
             nn.ReLU(),
             nn.Linear(latent_dim, latent_dim),
         )
+        
+        self.global_projection_mean2 = nn.Sequential(
+            nn.Linear(num_patches * points_per_patch * local_latent_dim, latent_dim),
+            nn.LayerNorm(latent_dim),
+            nn.ReLU(),
+            nn.Linear(latent_dim, latent_dim),
+        )
+        
+        self.global_projection_var2 = nn.Sequential(
+            nn.Linear(num_patches * points_per_patch * local_latent_dim, latent_dim),
+            nn.LayerNorm(latent_dim),
+            nn.ReLU(),
+            nn.Linear(latent_dim, latent_dim),
+        )
     
     def farthest_point_sampling(self, x, num_centers):
         """
@@ -331,14 +345,15 @@ class LocalPointNetEncoder(nn.Module):
         local_input = local_input.transpose(1, 2)           # [B*S, D, K]
 
         local_features = self.local_pointnet(local_input)   # [B*S, local_latent_dim, K]
-        local_features = torch.max(local_features, dim=-1)[0]  # [B*S, local_latent_dim]
+        #local_features = torch.max(local_features, dim=-1)[0]  # [B*S, local_latent_dim]
 
         # 5. Lokale Latents konkatenieren
-        local_features = local_features.reshape(B, S * self.local_latent_dim)  # [B, S*local_latent_dim]
+        #local_features = local_features.reshape(B, S * self.local_latent_dim)  # [B, S*local_latent_dim]
+        local_features = local_features.reshape(B, S * K * self.local_latent_dim)  # [B, S * K * local_latent_dim]
 
         # 6. Auf finalen Latent Space projizieren
-        mean = self.global_projection_mean(local_features)  # [B, latent_dim]
-        log_variance = self.global_projection_var(local_features)  # [B, latent_dim]
+        mean = self.global_projection_mean2(local_features)  # [B, latent_dim]
+        log_variance = self.global_projection_var2(local_features)  # [B, latent_dim]
         
         if self.clamp:
             log_variance = torch.clamp(log_variance, min=-30.0, max=20.0) # For numerical stability
