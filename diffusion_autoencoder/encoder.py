@@ -210,10 +210,13 @@ class LocalPointNetEncoder(nn.Module):
         self.number_points = number_points
         self.in_channels = in_channels
         self.num_patches = num_patches
+        if num_patches < 4:
+            self.num_patches = 4
         self.points_per_patch = points_per_patch
         self.local_latent_dim = local_latent_dim
         self.latent_dim = latent_dim
         self.use_center = use_center
+        self.hidden_channels = hidden_channels
         self.clamp = clamp
 
         # relative xyz + optional center xyz
@@ -232,38 +235,38 @@ class LocalPointNetEncoder(nn.Module):
             nn.BatchNorm1d(4 * hidden_channels),
             nn.ReLU(),
 
-            nn.Conv1d(4 * hidden_channels, local_latent_dim, 1),
+            nn.Conv1d(4 * hidden_channels, 2 * hidden_channels, 1),
+            nn.BatchNorm1d(2 * hidden_channels),
+            nn.ReLU(),
+            nn.Conv1d(2 * hidden_channels, hidden_channels, 1),
+            nn.BatchNorm1d(hidden_channels),
+            nn.ReLU(),
+            nn.Conv1d(hidden_channels, local_latent_dim, 1),
+
         )
 
         # Falls num_patches * local_latent_dim != latent_dim,
         # mappe sauber auf gewünschten latent_dim.
         self.global_projection_mean = nn.Sequential(
-            nn.Linear(num_patches * local_latent_dim, latent_dim),
-            nn.LayerNorm(latent_dim),
+            nn.Linear(self.num_patches * local_latent_dim * (self.points_per_patch + 1),  4 * latent_dim),
+            nn.LayerNorm(4 * latent_dim),
             nn.ReLU(),
-            nn.Linear(latent_dim, latent_dim),
+            nn.Linear(4 * latent_dim, 2 * latent_dim),
+            nn.LayerNorm(2 * latent_dim),
+            nn.ReLU(),
+            nn.Linear(2 * latent_dim, latent_dim)
         )
         
         self.global_projection_var = nn.Sequential(
-            nn.Linear(num_patches * local_latent_dim, latent_dim),
-            nn.LayerNorm(latent_dim),
+            nn.Linear(self.num_patches * local_latent_dim * (self.points_per_patch + 1), 4 * latent_dim),
+            nn.LayerNorm(4 * latent_dim),
             nn.ReLU(),
-            nn.Linear(latent_dim, latent_dim),
+            nn.Linear(4 * latent_dim, 2 * latent_dim),
+            nn.LayerNorm(2 * latent_dim),
+            nn.ReLU(),
+            nn.Linear(2 * latent_dim, latent_dim)
         )
         
-        self.global_projection_mean2 = nn.Sequential(
-            nn.Linear(num_patches * points_per_patch * local_latent_dim, latent_dim),
-            nn.LayerNorm(latent_dim),
-            nn.ReLU(),
-            nn.Linear(latent_dim, latent_dim),
-        )
-        
-        self.global_projection_var2 = nn.Sequential(
-            nn.Linear(num_patches * points_per_patch * local_latent_dim, latent_dim),
-            nn.LayerNorm(latent_dim),
-            nn.ReLU(),
-            nn.Linear(latent_dim, latent_dim),
-        )
     
     def farthest_point_sampling(self, x, num_centers):
         """
@@ -317,6 +320,9 @@ class LocalPointNetEncoder(nn.Module):
         """
         x: [B, N, 3]
         returns z: [B, latent_dim]
+        S (num_patches)
+        K (num_points_per_patch)
+        D (point_dim)
         """
         B, N, C = x.shape
 
@@ -345,15 +351,19 @@ class LocalPointNetEncoder(nn.Module):
         local_input = local_input.transpose(1, 2)           # [B*S, D, K]
 
         local_features = self.local_pointnet(local_input)   # [B*S, local_latent_dim, K]
-        #local_features = torch.max(local_features, dim=-1)[0]  # [B*S, local_latent_dim]
+        max_features = torch.max(local_features, dim=-1)[0]  # [B*S, local_latent_dim]
 
         # 5. Lokale Latents konkatenieren
-        #local_features = local_features.reshape(B, S * self.local_latent_dim)  # [B, S*local_latent_dim]
-        local_features = local_features.reshape(B, S * K * self.local_latent_dim)  # [B, S * K * local_latent_dim]
+        max_features = max_features.unsqueeze(dim=-1) # [B*S, local_latent_dim, 1]
+        local_features = torch.cat((local_features, max_features), dim=-1) # [B*S, local_latent_dim, K+1] 
+        local_features = local_features.reshape(B, S * self.local_latent_dim * (K+1))  # [B, S * local_latent_dim * (K+1)]
+        
+        #local_features = local_features.transpose(1, 2)     # [B*S, K, local_latent_dim]
+        #local_features = local_features.reshape(B, S * K * self.local_latent_dim)  # [B, S * K * local_latent_dim]
 
         # 6. Auf finalen Latent Space projizieren
-        mean = self.global_projection_mean2(local_features)  # [B, latent_dim]
-        log_variance = self.global_projection_var2(local_features)  # [B, latent_dim]
+        mean = self.global_projection_mean(local_features)  # [B, latent_dim]
+        log_variance = self.global_projection_var(local_features)  # [B, latent_dim]
         
         if self.clamp:
             log_variance = torch.clamp(log_variance, min=-30.0, max=20.0) # For numerical stability

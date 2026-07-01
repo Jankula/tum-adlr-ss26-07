@@ -334,6 +334,8 @@ if args.dry_run == False:
             chamfer_loss_history.append(chamfer_loss.detach().cpu().numpy())
             epoch.append((i+1))
             previous_chamfer_loss = chamfer_loss
+            logger(f"Chamfer loss at Epoch {i} on validation set: {chamfer_loss:.3f}")
+            print(f"Chamfer loss at Epoch {i} on validation set: {chamfer_loss:.3f}")
             
             model.train()
 
