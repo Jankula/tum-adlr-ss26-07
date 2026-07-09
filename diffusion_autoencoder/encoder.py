@@ -401,40 +401,40 @@ class LocalPointNetEncoder2(nn.Module):
 
         self.local_pointnet = nn.Sequential(
             nn.Linear(self.local_input_dim, hidden_channels),
-            nn.BatchNorm1d(hidden_channels),
+            nn.LayerNorm(hidden_channels),
             nn.ReLU(),
 
             nn.Linear(hidden_channels, 2 * hidden_channels),
-            nn.BatchNorm1d(2 * hidden_channels),
+            nn.LayerNorm(2 * hidden_channels),
             nn.ReLU(),
 
-            nn.Linear(2 * hidden_channels, 3 * hidden_channels),
-            nn.BatchNorm1d(3 * hidden_channels),
+            nn.Linear(2 * hidden_channels, hidden_channels),
+            nn.LayerNorm(hidden_channels),
             nn.ReLU(),
 
-            nn.Linear(3 * hidden_channels, local_latent_dim),
+            nn.Linear(hidden_channels, local_latent_dim),
         )
 
         # Falls num_patches * local_latent_dim != latent_dim,
         # mappe sauber auf gewünschten latent_dim.
         self.global_projection_mean = nn.Sequential(
-            nn.Linear(self.num_patches * (local_latent_dim + 3) * (self.points_per_patch + 1),  3 * latent_dim),
-            nn.LayerNorm(3 * latent_dim),
+            nn.Linear(self.num_patches * (local_latent_dim + 3) * (self.points_per_patch + 1),  4 * latent_dim),
+            nn.LayerNorm(4 * latent_dim),
             nn.ReLU(),
-            nn.Linear(3 * latent_dim, latent_dim),
-            nn.LayerNorm(latent_dim),
+            nn.Linear(4 * latent_dim, 2 * latent_dim),
+            nn.LayerNorm(2 * latent_dim),
             nn.ReLU(),
-            nn.Linear(latent_dim, latent_dim)
+            nn.Linear(2 * latent_dim, latent_dim)
         )
         
         self.global_projection_var = nn.Sequential(
-            nn.Linear(self.num_patches * (local_latent_dim + 3) * (self.points_per_patch + 1), 3 * latent_dim),
-            nn.LayerNorm(3 * latent_dim),
+            nn.Linear(self.num_patches * (local_latent_dim + 3) * (self.points_per_patch + 1), 4 * latent_dim),
+            nn.LayerNorm(4 * latent_dim),
             nn.ReLU(),
-            nn.Linear(3 * latent_dim, latent_dim),
-            nn.LayerNorm(latent_dim),
+            nn.Linear(4 * latent_dim, 2 * latent_dim),
+            nn.LayerNorm(2 * latent_dim),
             nn.ReLU(),
-            nn.Linear(latent_dim, latent_dim)
+            nn.Linear(2 * latent_dim, latent_dim)
         )
         
     
@@ -516,7 +516,6 @@ class LocalPointNetEncoder2(nn.Module):
 
         # 4. Shared Local PointNet auf alle Patches anwenden
         B, S, K, D = local_input.shape
-
         local_features = self.local_pointnet(local_input)   # [B, S, K, local_latent_dim]
         
         if self.use_center:

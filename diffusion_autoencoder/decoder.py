@@ -192,7 +192,7 @@ class AutoEncoderPP(nn.Module):
     def __init__(self, number_points=256, point_dim=3, hidden_dim=32, latent_dim=32, num_steps=1000, beta_1=1e-4, beta_T=0.05, kl_start=1e-4):
         super().__init__()
         self.kl_state = kl_start
-        self.encoder = LocalPointNetEncoder(number_points=number_points, in_channels=point_dim, hidden_channels=2 * hidden_dim, latent_dim=latent_dim)
+        self.encoder = LocalPointNetEncoder2(number_points=number_points, in_channels=point_dim, hidden_channels=2 * hidden_dim, latent_dim=latent_dim)
         self.diffusion = DiffusionPoint(
             net = PointwiseNet(point_dim=point_dim, context_dim=latent_dim, hidden_dim=hidden_dim, residual=True),
             var_sched = VarianceSchedule(
