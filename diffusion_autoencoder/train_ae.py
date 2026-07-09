@@ -276,7 +276,8 @@ if args.dry_run == False:
     train_loss_history = []
     val_loss_history = []
     kld_loss_history = []
-    chamfer_loss_history = []
+    chamfer_loss_val_history = []
+    chamfer_loss_train_history = []
     epoch = []
 
     for i in range(args.num_epochs):
@@ -316,26 +317,41 @@ if args.dry_run == False:
             
             model.eval()
             
-            chamfer_loss = 0
+            chamfer_loss_val = 0
+            chamfer_loss_train = 0
             
             for batch in val_dl:
                 batch = batch.to(device)
                 _, means, _ = model.encode(batch)
                 pred_pcs = model.decode(means, args.num_points)
-                chamfer_loss += chamfer_custom(pred_pcs, batch)
+                chamfer_loss_val += chamfer_custom(pred_pcs, batch)
             
-            if bool(chamfer_loss.shape):
-                chamfer_loss = chamfer_loss.mean()
+            chamfer_loss_val /= len(val_dl)
+            
+            for batch in train_dl:
+                batch = batch.to(device)
+                _, means, _ = model.encode(batch)
+                pred_pcs = model.decode(means, args.num_points)
+                chamfer_loss_train += chamfer_custom(pred_pcs, batch)
+            
+            chamfer_loss_train /= len(train_dl)
+            
+            if bool(chamfer_loss_val.shape):
+                chamfer_loss_val = chamfer_loss_val.mean()
+                chamfer_loss_train = chamfer_loss_train.mean()
 
-            if chamfer_loss < previous_chamfer_loss:
-                logger(f"Saving new best model at Epoch: {i+1}\n" + f"Chamfer loss of the best model: {chamfer_loss:.3f}\n")
+            if chamfer_loss_val < previous_chamfer_loss:
+                logger(f"Saving new best model at Epoch: {i+1}\n" + f"Chamfer loss of the best model: {chamfer_loss_val:.3f}\n")
                 torch.save(model.state_dict(), save_path + "/best_model.pt")
 
-            chamfer_loss_history.append(chamfer_loss.detach().cpu().numpy())
+            chamfer_loss_val_history.append(chamfer_loss_val.detach().cpu().numpy())
+            chamfer_loss_train_history.append(chamfer_loss_train.detach().cpu().numpy())
             epoch.append((i+1))
-            previous_chamfer_loss = chamfer_loss
-            logger(f"Chamfer loss at Epoch {i} on validation set: {chamfer_loss:.3f}")
-            print(f"Chamfer loss at Epoch {i} on validation set: {chamfer_loss:.3f}")
+            previous_chamfer_loss = chamfer_loss_val
+            logger(f"Chamfer loss at Epoch {i} on validation set: {chamfer_loss_val:.3f}")
+            print(f"Chamfer loss at Epoch {i} on validation set: {chamfer_loss_val:.3f}")
+            logger(f"Chamfer loss at Epoch {i} on train set: {chamfer_loss_train:.3f}")
+            print(f"Chamfer loss at Epoch {i} on train set: {chamfer_loss_train:.3f}")
             
             model.train()
 
@@ -390,7 +406,8 @@ if args.dry_run == False:
     fig.savefig(save_path + "/kld_loss.png")
     
     fig = plt.figure(figsize=(15, 10))
-    plt.plot(epoch, chamfer_loss_history, color="g", label="Chamfer Loss")
+    plt.plot(epoch, chamfer_loss_val_history, color="r", label="Chamfer Loss Validation Set")
+    plt.plot(epoch, chamfer_loss_train_history, color="b", label="Chamfer Loss Training Set")
     plt.legend()
     fig.savefig(save_path + "/chamfer_loss.png")
     plt.show()
