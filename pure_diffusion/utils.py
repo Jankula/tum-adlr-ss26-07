@@ -1,0 +1,65 @@
+from email.utils import decode_rfc2231
+
+import torch
+import pathlib
+import pure_diffusion.diffusion_model as diffusion_model
+# import encoder
+# import decoder
+
+
+def save_model(decoder, optimizer, scheduler, config, model_config, type):
+    checkpoint = {
+    'decoder_state': decoder.state_dict(),
+    'optimizer_state': optimizer.state_dict(),
+    'scheduler_state': scheduler.state_dict(),
+    'config': config,
+    'model_config': model_config
+    }
+    path = pathlib.Path(f'models/{config["experiment_name"]}')
+    path.mkdir(parents=True, exist_ok=True)
+    torch.save(checkpoint, pathlib.Path(f'models/{config["experiment_name"]}/{type}.pt'))
+
+def reload_model(optimizer, scheduler, experiment_name, type, device):
+    checkpoint = torch.load(pathlib.Path(f'models/{experiment_name}/{type}.pt'), weights_only=False, map_location=device)
+
+    config = checkpoint['config']
+    
+    model_config = checkpoint['model_config']
+
+    decoder = diffusion_model.Decoder(hidden_dim=model_config['hidden_dim'], embedding_dim=model_config['embedding_dim'],
+                       timesteps=config['timesteps'], beta_start=1e-4, beta_end=0.02)
+
+    decoder.to(device)
+
+    decoder.load_state_dict(checkpoint['decoder_state'])
+    if optimizer is not None:
+        optimizer.load_state_dict(checkpoint['optimizer_state'])
+    if scheduler is not None:
+        scheduler.load_state_dict(checkpoint['scheduler_state'])
+
+    decoder.eval()
+
+    return config, model_config, decoder
+
+
+def count_parameters(model):
+    # Total parameters (including non-trainable ones)
+    total_params = sum(p.numel() for p in model.parameters())
+    
+    # Only parameters that require gradients
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    
+    return total_params, trainable_params
+
+
+def model_memory_size(model):
+    param_size = 0
+    for param in model.parameters():
+        param_size += param.nelement() * param.element_size()
+    
+    buffer_size = 0
+    for buffer in model.buffers():
+        buffer_size += buffer.nelement() * buffer.element_size()
+
+    size_all_mb = (param_size + buffer_size) / 1024**2
+    return size_all_mb
