@@ -1,8 +1,6 @@
-from email.utils import decode_rfc2231
-
 import torch
 import pathlib
-import pure_diffusion.diffusion_model as diffusion_model
+import diffusion_model
 # import encoder
 # import decoder
 

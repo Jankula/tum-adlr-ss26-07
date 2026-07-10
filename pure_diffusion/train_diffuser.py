@@ -14,8 +14,8 @@ import trimesh
 import random
 
 import utils, dataset
-from pure_diffusion.diffusion_model import Decoder
-from pure_diffusion.diffusion_model import sample_ddim
+from diffusion_model import Decoder
+from diffusion_model import sample_ddim
 
 
 def train(decoder, trainloader, valloader, device, optimizer, scheduler, config, model_config, writer_train, writer_val, debug_file):
@@ -46,7 +46,7 @@ def train(decoder, trainloader, valloader, device, optimizer, scheduler, config,
             timestep_batch = torch.randint(0, diffuser.T, (batch_grasp.shape[0],), device=device).long() #[B,]
             
             noisy_pc, actual_noise = diffuser.add_noise(batch_pc, timestep_batch)
-            predicted_noise = denoiser(noisy_pc, timestep_batch, batch_grasp)
+            predicted_noise = denoiser(noisy_pc, batch_grasp, timestep_batch)
 
             mse_loss_per_item = F.mse_loss(predicted_noise, actual_noise, reduction='none').mean(dim=[1,2]) #[B]
             MSE_loss = mse_loss_per_item.mean()
@@ -69,12 +69,12 @@ def train(decoder, trainloader, valloader, device, optimizer, scheduler, config,
             # debug_file.write('train_loss_epoch_running: ' + str(train_loss_epoch_running) + '\n')
             # debug_file.flush()
 
-            # iteration = epoch * len(trainloader) + i
+            iteration = epoch * len(trainloader) + i
 
             # Train Loss
-            if epoch % config['print_every_n'] == (config['print_every_n'] - 1):
-                print(f'[{epoch:03d}] train_loss: {train_loss_running / config["print_every_n"]:.3f}')
-                writer_train.add_scalar("Loss", train_loss_running / config["print_every_n"], epoch)
+            if iteration % config['print_every_n'] == (config['print_every_n'] - 1):
+                print(f'[{epoch:03d}:{i:03d}/{len(trainloader)}] train_loss: {train_loss_running / config["print_every_n"]:.3f}')
+                writer_train.add_scalar("Loss", train_loss_running / config["print_every_n"], iteration)
                 train_loss_running = 0.
 
             # Average loss per timestep     
@@ -138,7 +138,7 @@ def train(decoder, trainloader, valloader, device, optimizer, scheduler, config,
                 
                 with torch.no_grad():
                     noisy_pc, actual_noise = diffuser.add_noise(batch_pc, timestep_batch)
-                    predicted_noise = denoiser(noisy_pc, timestep_batch, batch_grasp)
+                    predicted_noise = denoiser(noisy_pc, batch_grasp, timestep_batch)
 
                 mse_loss_per_item = F.mse_loss(predicted_noise, actual_noise, reduction='none').mean(dim=[1,2]) #[B]
                 MSE_loss = mse_loss_per_item.mean()
@@ -154,8 +154,8 @@ def train(decoder, trainloader, valloader, device, optimizer, scheduler, config,
             
             # Val Loss
             loss_val = loss_total_val / len(valloader)
-            print(f'[{epoch:03d}] val_loss: {loss_val:.3f}')
-            writer_val.add_scalar("Loss", loss_val, epoch)
+            print(f'[{epoch:03d}:{i:03d}/{len(trainloader)}] val_loss: {loss_val:.3f}')
+            writer_val.add_scalar("Loss", loss_val, iteration)
             
 
             # avg_error_list = []
@@ -193,13 +193,13 @@ def train(decoder, trainloader, valloader, device, optimizer, scheduler, config,
                     avg_chamfer += dist
                     # print(f"Chamfer distance, Object{object_index}: {dist}")
             avg_chamfer_dist = avg_chamfer / (len(valset))
-            print(f"[{epoch:03d}] avg_chamf: {avg_chamfer_dist:.05f}")
+            print(f"[{epoch:03d}] Average Chamfer: {avg_chamfer_dist:.05f}")
             writer_val.add_scalar("Average Chamfer Distance", avg_chamfer_dist, epoch)
 
             if avg_chamfer_dist < model_config['best_chamfer_loss']:
                 model_config['best_chamfer_loss'] = avg_chamfer_dist
                 utils.save_model(decoder, optimizer, scheduler, config, model_config, type = 'best_chamfer')
-                # print(f"Best Chamfer Model:  {model_config['best_chamfer_loss']:.05f}")
+                print(f"Best Chamfer Model!")
 
             # CHAMFER
             #___________________________________________________________________________________________________________________
@@ -240,17 +240,18 @@ def train(decoder, trainloader, valloader, device, optimizer, scheduler, config,
             # TRAIN CHAMFER
             #_____________________________________________________________________________________________________________
 
+
         # VALIDATION
         #___________________________________________________________________________________________________
 
 
         train_loss_epoch = train_loss_epoch_running / len(trainloader)
 
-        # Save model weights if the best loss is achieved  
+            # Save model weights if the best loss is achieved  
         if  train_loss_epoch < model_config['best_train_loss']:
             model_config['best_train_loss'] = train_loss_epoch
             utils.save_model(decoder, optimizer, scheduler, config, model_config, type = "best_train")
-            print(f"Best train Model: {model_config['best_train_loss']:.03f}")
+            print(f"Best train model!")
 
         
         # Checkpoint saving
@@ -272,8 +273,8 @@ if __name__ == "__main__":
 
     # Model name
     current_time = datetime.datetime.now().strftime("%b%d_%H-%M")
-    # denoiser_name = "epochs=2000_latent_dim=128_hidden_dim=512_embedding_dim=240"
-    denoiser_name = "TEST"
+    denoiser_name = "epochs=30_hidden_dim=256_embedding_dim=240"
+    # denoiser_name = "TEST"
     experiment_name = f"{current_time}_{denoiser_name}"
 
 
@@ -281,15 +282,15 @@ if __name__ == "__main__":
         'experiment_name': experiment_name,
         'device': 'cuda:0',
         'train_batch_size': 256,
-        'val_batch_size': 256,
+        'val_batch_size': 512,
         'learning_rate': 0.0004,
         'step_size': 10, # scheduler step, one step is one batch
         'gamma': 1,
-        'max_epochs': 7000,
+        'max_epochs': 30,
         'timesteps': 1000,
-        'print_every_n': 15, # every n batches
-        'validate_every_n_epochs': 30,
-        'average_MSE_every_n': 10
+        'print_every_n': 20, # every n batches
+        'validate_every_n_epochs': 1,
+        'average_MSE_every_n': 1
     }
 
     model_config = {
